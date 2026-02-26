@@ -1,4 +1,4 @@
-package git
+package patchbin
 
 import (
 	"crypto/sha256"
@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,20 +16,10 @@ import (
 
 var (
 	baseCommitRe   = regexp.MustCompile(`base-commit: (.+)\s*`)
-	letters        = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	startOfPatch   = "From "
 	patchsetPrefix = "ps-"
 	prPrefix       = "pr-"
 )
-
-// https://stackoverflow.com/a/22892986
-func randSeq(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return strings.ToLower(string(b))
-}
 
 func truncateSha(sha string) string {
 	if len(sha) < 7 {
@@ -123,6 +112,14 @@ func ParsePatchset(patchset io.Reader) ([]*Patch, error) {
 	_, err := io.Copy(buf, patchset)
 	if err != nil {
 		return nil, err
+	}
+
+	if strings.TrimSpace(buf.String()) == "" {
+		return nil, fmt.Errorf("patchset is empty")
+	}
+
+	if !strings.HasPrefix(buf.String(), startOfPatch) {
+		return nil, fmt.Errorf("unrecognized patchset: must start with %q", startOfPatch)
 	}
 
 	patchesRaw := splitPatchSet(buf.String())

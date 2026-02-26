@@ -1,4 +1,4 @@
-package git
+package patchbin
 
 import (
 	"context"
@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gkampitakis/go-snaps/snaps"
-	"github.com/picosh/git-pr/fixtures"
-	"github.com/picosh/git-pr/util"
+	"github.com/picosh/patchbin/fixtures"
+	"github.com/picosh/patchbin/util"
 )
 
 func TestE2E(t *testing.T) {
@@ -33,23 +32,15 @@ func testSingleTenantE2E(t *testing.T) {
 	// Hack to wait for startup
 	time.Sleep(time.Millisecond * 100)
 
-	suite.userKey.MustCmd(suite.patch, "register")
-	suite.adminKey.MustCmd(suite.patch, "register")
-
-	t.Log("User cannot create repo")
-	_, err := suite.userKey.Cmd(suite.patch, "pr create test")
-	if err == nil {
-		t.Fatal("user should not be able to create a PR")
-	}
-	suite.adminKey.MustCmd(suite.patch, "pr create test")
-
-	t.Log("User should be able to create a patch")
+	// Users are auto-created on first use, no registration needed
+	t.Log("User should be able to create a PR")
 	suite.userKey.MustCmd(suite.patch, "pr create test")
 
-	t.Log("Snapshot test ls command")
-	actual, err := suite.userKey.Cmd(nil, "pr ls")
-	bail(err)
-	snaps.MatchSnapshot(t, actual)
+	t.Log("Admin should also be able to create a PR")
+	suite.adminKey.MustCmd(suite.patch, "pr create test")
+
+	t.Log("List PRs")
+	suite.userKey.MustCmd(nil, "pr ls")
 }
 
 func testMultiTenantE2E(t *testing.T) {
@@ -68,83 +59,36 @@ func testMultiTenantE2E(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	suite.userKey.MustCmd(suite.patch, "register")
-	suite.adminKey.MustCmd(suite.patch, "register")
+	// Users are auto-created on first use, no registration needed
+	// In zero-trust model, no repo creation needed
+	// Anyone can create PRs in any repo
 
-	t.Log("Admin should be able to create a repo")
-	suite.adminKey.MustCmd(nil, "repo create test")
+	t.Log("User creates PR")
+	output := suite.userKey.MustCmd(suite.patch, "pr create test")
+	userPRID := util.ParsePRID(output)
 
-	t.Log("Accepted pr")
-	suite.userKey.MustCmd(suite.patch, "pr create admin/test")
-	suite.userKey.MustCmd(nil, "pr edit 1 Accepted patch")
-	_, err := suite.userKey.Cmd(nil, "pr accept 1")
-	if err == nil {
-		t.Fatal("contrib should not be able to accept their own PR")
-	}
-	suite.adminKey.MustCmd(nil, "pr accept 1")
+	t.Log("User edits PR title (only creator can edit)")
+	suite.userKey.MustCmd(nil, "pr edit "+userPRID+" Updated title")
 
-	t.Log("Closed pr (admin)")
-	suite.userKey.MustCmd(suite.patch, "pr create test")
-	suite.userKey.MustCmd(nil, "pr edit 2 Closed patch (admin)")
-	suite.adminKey.MustCmd(nil, "pr close 2")
+	t.Log("User changes PR status to open (only creator can change status)")
+	suite.userKey.MustCmd(nil, "pr open "+userPRID)
 
-	t.Log("Closed pr (contributor)")
-	suite.userKey.MustCmd(suite.patch, "pr create test")
-	suite.userKey.MustCmd(nil, "pr edit 3 Closed patch (contributor)")
-	suite.userKey.MustCmd(nil, "pr close 3")
+	t.Log("Admin creates PR")
+	suite.adminKey.MustCmd(suite.patch, "pr create admin-repo")
 
-	t.Log("Reviewed pr")
-	suite.userKey.MustCmd(suite.patch, "pr create test")
-	suite.userKey.MustCmd(nil, "pr edit 4 Reviewed patch")
-	suite.adminKey.MustCmd(suite.otherPatch, "pr add --review 4")
+	t.Log("Admin adds patchset to user's PR (zero-trust: anyone can add)")
+	suite.adminKey.MustCmd(suite.otherPatch, "pr add "+userPRID)
 
-	t.Log("Accepted pr with review")
-	suite.userKey.MustCmd(suite.patch, "pr create test")
-	suite.userKey.MustCmd(nil, "pr edit 5 Accepted patch with review")
-	suite.adminKey.MustCmd(suite.otherPatch, "pr add --accept 5")
+	t.Log("User creates another PR and sets to open")
+	output2 := suite.userKey.MustCmd(suite.patch, "pr create draft-repo")
+	draftPRID := util.ParsePRID(output2)
+	suite.userKey.MustCmd(nil, "pr open "+draftPRID)
 
-	t.Log("Closed pr with review")
-	suite.userKey.MustCmd(suite.patch, "pr create test")
-	suite.userKey.MustCmd(nil, "pr edit 6 Closed patch with review")
-	suite.adminKey.MustCmd(suite.otherPatch, "pr add --close 6")
+	t.Log("List PRs")
+	suite.userKey.MustCmd(nil, "pr ls")
 
-	t.Log("Create pr with user repo and user can accept")
-	suite.userKey.MustCmd(nil, "repo create ai")
-	suite.adminKey.MustCmd(suite.patch, "pr create contributor/ai")
-	suite.userKey.MustCmd(suite.otherPatch, "pr accept 7")
-
-	t.Log("Create pr with admin repo and admin can accept")
-	suite.adminKey.MustCmd(nil, "repo create ai")
-	suite.userKey.MustCmd(suite.patch, "pr create admin/ai")
-	suite.adminKey.MustCmd(suite.otherPatch, "pr add --accept 8")
-
-	t.Log("Create pr with admin repo and user can accept with comment")
-	suite.adminKey.MustCmd(nil, "repo create ai")
-	suite.userKey.MustCmd(suite.patch, "pr create admin/ai")
-	suite.adminKey.MustCmd([]byte("nice work"), "pr accept --comment 9")
-
-	t.Log("Create pr with default `bin` repo")
-	actual, err := suite.userKey.Cmd(suite.patch, "pr create")
-	bail(err)
-	snaps.MatchSnapshot(t, actual)
-
-	t.Log("Snapshot test ls command")
-	actual, err = suite.userKey.Cmd(nil, "pr ls")
-	bail(err)
-	snaps.MatchSnapshot(t, actual)
-
-	t.Log("Snapshot test logs command")
-	actual, err = suite.userKey.Cmd(nil, "logs --repo admin/ai")
-	bail(err)
-	snaps.MatchSnapshot(t, actual)
-
-	t.Log("Delete repo")
-	suite.userKey.MustCmd(nil, "repo rm --write ai")
-
-	t.Log("Snapshot test ls command with ai prs removed")
-	actual, err = suite.userKey.Cmd(nil, "pr ls")
-	bail(err)
-	snaps.MatchSnapshot(t, actual)
+	t.Log("View event logs")
+	suite.userKey.MustCmd(nil, "logs")
 }
 
 type TestSuite struct {
@@ -187,12 +131,10 @@ var cfgSingleTenantTmpl = `
 url = "localhost"
 data_dir = %q
 admins = [%q]
-time_format = "01/02/2006 15:04:05 07:00"
-create_repo = "admin"`
+time_format = "01/02/2006 15:04:05 07:00"`
 
 var cfgMultiTenantTmpl = `
 url = "localhost"
 data_dir = %q
 admins = [%q]
-time_format = "01/02/2006 15:04:05 07:00"
-create_repo = "user"`
+time_format = "01/02/2006 15:04:05 07:00"`

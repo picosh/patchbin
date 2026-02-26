@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/picosh/git-pr"
-	"github.com/picosh/git-pr/fixtures"
-	"github.com/picosh/git-pr/util"
+	"github.com/picosh/patchbin"
+	"github.com/picosh/patchbin/fixtures"
+	"github.com/picosh/patchbin/util"
 )
 
 func main() {
@@ -36,17 +36,17 @@ func main() {
 
 	adminKey, userKey := util.GenerateKeys()
 	cfgPath := util.CreateCfgFile(dataDir, cfgTmpl, adminKey)
-	git.LoadConfigFile(cfgPath, logger)
-	cfg := git.NewGitCfg(logger)
+	patchbin.LoadConfigFile(cfgPath, logger)
+	cfg := patchbin.NewGitCfg(logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := git.GitSshServer(ctx, cfg)
+	s := patchbin.GitSshServer(ctx, cfg)
 	go func() {
 		_ = s.ListenAndServe()
 	}()
 	time.Sleep(time.Millisecond * 100)
-	w := git.GitWebServer(cfg)
+	w := patchbin.GitWebServer(cfg)
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.WebPort)
 	go func() {
 		_ = http.ListenAndServe(addr, w)
@@ -72,35 +72,33 @@ func main() {
 		panic(err)
 	}
 
-	// Accepted patch
+	// Opened patch (creator opens their own PR)
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 1 Accepted patch")
-	adminKey.MustCmd(nil, `pr accept --comment "lgtm!" 1`)
+	userKey.MustCmd(nil, "pr edit 1 Opened patch")
+	userKey.MustCmd(nil, `pr open --comment "ready for review" 1`)
 
-	// Closed patch (admin)
+	// Drafted patch (creator sets back to draft)
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 2 Closed patch (admin)")
-	adminKey.MustCmd(nil, `pr close --comment "Thanks for the effort! I think we might use PR #1 though." 2`)
+	userKey.MustCmd(nil, "pr edit 2 Drafted patch")
+	userKey.MustCmd(nil, `pr draft --comment "need more work" 2`)
 
-	// Closed patch (contributor)
+	// Opened then re-drafted by creator
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 3 Closed patch (contributor)")
-	userKey.MustCmd(nil, `pr close --comment "Woops, didn't mean to submit yet" 3`)
+	userKey.MustCmd(nil, "pr edit 3 Opened then re-drafted")
+	userKey.MustCmd(nil, `pr open 3`)
+	userKey.MustCmd(nil, `pr draft --comment "Woops, didn't mean to submit yet" 3`)
 
-	// Reviewed patch
+	// Patchset added by another user, creator opens
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 4 Reviewed patch")
-	adminKey.MustCmd(otherPatch, "pr add --review 4")
+	userKey.MustCmd(nil, "pr edit 5 Patchset from another user")
+	adminKey.MustCmd(otherPatch, `pr add 5`)
+	userKey.MustCmd(nil, `pr open --comment "updated with feedback" 5`)
 
-	// Accepted patch with review
+	// Patchset added by another user, creator drafts
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 5 Accepted patch with review")
-	adminKey.MustCmd(otherPatch, `pr add --accept --comment "L G T M" 5`)
-
-	// Closed patch with review
-	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 6 Closed patch with review")
-	adminKey.MustCmd(otherPatch, `pr add --close --comment "So close! I think we might try something else instead." 6`)
+	userKey.MustCmd(nil, "pr edit 6 Patchset then drafted")
+	adminKey.MustCmd(otherPatch, `pr add 6`)
+	userKey.MustCmd(nil, `pr draft --comment "taking a step back on this" 6`)
 
 	// Range Diff
 	userKey.MustCmd(rd1, "pr create test")
@@ -118,5 +116,4 @@ var cfgTmpl = `
 url = "localhost"
 data_dir = %q
 admins = [%q]
-time_format = "01/02/2006 15:04:05 07:00"
-create_repo = "user"`
+time_format = "01/02/2006 15:04:05 07:00"`

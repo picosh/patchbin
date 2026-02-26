@@ -1,4 +1,4 @@
-{{template "base" .}}
+{{template "base" .}}
 
 {{define "title"}}{{.Pr.Title}} - pr summary{{end}}
 
@@ -13,93 +13,121 @@
 {{end}}
 
 {{define "body"}}
-{{template "pr-header" .}}
-
 <main class="group">
-  {{template "pr-tabs" .}}
+  <div class="flex justify-center items-center">
+    <div class="box container w-full">
+      <h1 class="text-xl">{{.RepoName}}</h1>
 
-  {{if eq .Tab "timeline"}}
-  <div class="group timeline">
-    {{range .Logs}}
-    <div class="timeline-item{{if eq .Event "pr_status_changed"}} timeline-status-{{.Data.Status}}{{end}}">
-      {{if eq .Event "pr_patchset_added"}}
-        <details class="mb" style="border: 0; padding: 0;">
-          <summary>
-            {{template "user-pill" .UserData}}
-            <span class="font-bold">added <a href="/ps/{{.Patchset.ID}}"><code>{{.FormattedPatchsetID}}</code></a></span>
-            <span>(<code><a href="/rd/{{.Patchset.ID}}">range-diff</a></code>)</span>
-            <span>on <date>{{.Date}}</date></span>
-          </summary>
-
-          <div class="group">
-            {{- range .RangeDiff -}}
-              <div>
-                <code class='{{if eq .Type "rm"}}pill-admin{{else if eq .Type "add"}}pill-success{{else if eq .Type "diff"}}pill-review{{end}}'>
-                  {{.Header}}
-                </code>
-              </div>
-            {{- end -}}
-          </div>
-        </details>
-      {{else if eq .Event "pr_reviewed"}}
-        <details class="mb" style="border: 0; padding: 0;">
-          <summary>
-            {{template "user-pill" .UserData}}
-            <span class="font-bold">reviewed pr with <a href="/ps/{{.Patchset.ID}}"><code class="pill-review">{{.FormattedPatchsetID}}</code></a></span>
-            <span>(<code><a href="/rd/{{.Patchset.ID}}">range-diff</a></code>)</span>
-            <span>on <date>{{.Date}}</date></span>
-          </summary>
-
-          <div class="group">
-            {{- range .RangeDiff -}}
-              <div>
-                <code class='{{if eq .Type "rm"}}pill-admin{{else if eq .Type "add"}}pill-success{{else if eq .Type "diff"}}pill-review{{end}}'>
-                  {{.Header}}
-                </code>
-              </div>
-            {{- end -}}
-          </div>
-        </details>
-      {{else if eq .Event "pr_status_changed"}}
-        <div>
-          {{template "user-pill" .UserData}}
-          <span class="font-bold">changed status to
-            <code class="pill-status-{{.Data.Status}}">{{.Data.Status}}</code>
-          </span>
-          <span>on <date>{{.Date}}</date></span>
-        </div>
-
-        {{if .Data.Comment}}
-        <div class="status-change-comment">{{.Data.Comment}}</div>
+      <div class="flex items-center gap border-visited flex-wrap">
+        <a href="/prs/{{.Pr.ID}}">{{.Pr.Title}}</a>
+        {{if eq .Pr.Status "draft"}}
+          <code class="pill-info">{{.Pr.Status}}</code>
+        {{else if eq .Pr.Status "open"}}
+          <code class="pill-success">{{.Pr.Status}}</code>
+        {{else}}
+          <code>{{.Pr.Status}}</code>
         {{end}}
-      {{else}}
-        <div>
-          {{template "user-pill" .UserData}}
-          <span class="font-bold">
-            {{if eq .Event "pr_created"}}
-              created pr with <a href="/ps/{{.Patchset.ID}}"><code>{{.FormattedPatchsetID}}</code></a>
-            {{else if eq .Event "pr_patchset_deleted"}}
-              deleted <code>{{.FormattedPatchsetID}}</code>
-            {{else if eq .Event "pr_patchset_replaced"}}
-              replaced <code>{{.FormattedPatchsetID}}</code>
-            {{else if eq .Event "pr_name_changed"}}
-              changed pr name to <code>{{.Data.Name}}</code>
-            {{else}}
-              {{.Event}}
+        <a class="btn-nav flex items-center" href="/prs/{{.Pr.ID}}/rss" style="padding: 0.025rem 0.3rem;">
+          rss
+        </a>
+      </div>
+
+      <div class="group timeline text-sm my">
+        {{range .Logs}}
+        <div class="timeline-item{{if eq .Event "pr_status_changed"}} timeline-status-{{.Data.Status}}{{end}}">
+          {{if eq .Event "pr_patchset_added"}}
+            <details class="mb" style="border: 0; padding: 0;">
+              <summary>
+                <span class="font-bold">added <a href="/ps/{{.Patchset.ID}}"><code{{if eq .Patchset.ID $.Patchset.ID}} class="border-visited"{{end}}>{{.FormattedPatchsetID}}</code></a></span>
+                <span class="event-meta">on <date>{{.Date}}</date> &middot; by {{template "user-pill" .UserData}}</span>
+              </summary>
+
+              <div class="group">
+                {{- range .RangeDiff -}}
+                  <div>
+                    <code class='{{if eq .Type "rm"}}pill-admin{{else if eq .Type "add"}}pill-success{{else if eq .Type "changed"}}pill-info{{end}}'>
+                      {{.Header}}
+                    </code>
+                  </div>
+                {{- end -}}
+              </div>
+            </details>
+
+          {{else if eq .Event "pr_status_changed"}}
+            <div>
+              <span class="font-bold">changed status to
+                <code class="pill-status-{{.Data.Status}}">{{.Data.Status}}</code>
+              </span>
+              <span class="event-meta">on <date>{{.Date}}</date> &middot; by {{template "user-pill" .UserData}}</span>
+            </div>
+
+            {{if .Data.Comment}}
+            <div class="status-change-comment">{{.Data.Comment}}</div>
             {{end}}
-          </span>
-          <span>on <date>{{.Date}}</date></span>
+
+          {{else}}
+            <div>
+              <span class="font-bold">
+                {{if eq .Event "pr_created"}}
+                  created pr with <a href="/ps/{{.Patchset.ID}}"><code{{if eq .Patchset.ID $.Patchset.ID}} class="border-visited"{{end}}>{{.FormattedPatchsetID}}</code></a>
+                {{else if eq .Event "pr_patchset_deleted"}}
+                  deleted <code>{{.FormattedPatchsetID}}</code>
+                {{else if eq .Event "pr_patchset_replaced"}}
+                  replaced <code>{{.FormattedPatchsetID}}</code>
+                {{else if eq .Event "pr_name_changed"}}
+                  changed pr name to <code>{{.Data.Name}}</code>
+                {{else}}
+                  {{.Event}}
+                {{end}}
+              </span>
+              <span class="event-meta">on <date>{{.Date}}</date> &middot; by {{template "user-pill" .UserData}}</span>
+            </div>
+          {{end}}
         </div>
-      {{end}}
+        {{end}}
+      </div>
+
+      <details class="text-sm">
+        <summary>cmds</summary>
+        <div class="group my">
+          checkout latest patchset:
+          <pre class="m-0">ssh {{.MetaData.URL}} print pr-{{.Pr.ID}} | git am -3</pre>
+
+          checkout any patchset in a patch request:
+          <pre class="m-0">ssh {{.MetaData.URL}} print ps-X | git am -3</pre>
+
+          add changes to patch request:
+          <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} pr add {{.Pr.ID}}</pre>
+
+          set PR to open (enables RSS notifications):
+          <pre class="m-0">ssh {{.MetaData.URL}} pr open {{.Pr.ID}}</pre>
+
+          set PR to draft (stops RSS notifications):
+          <pre class="m-0">ssh {{.MetaData.URL}} pr draft {{.Pr.ID}}</pre>
+        </div>
+      </details>
     </div>
-    {{end}}
   </div>
-  {{else}}
-  {{if .IsRangeDiff}}
-    {{template "range-diff" .}}
-  {{else}}
-    {{template "patchset" .}}
-  {{end}}
-  {{end}}
+
+  <div class="flex justify-center items-center">
+    <div class="patchset-split">
+      <h3 class="text-md mb">
+        Patchset
+        <a href="/ps/{{.Patchset.ID}}"><code class="border-visited">{{.FormattedPatchsetID}}</code></a>
+        <span class="event-meta">on <date>{{.PatchsetDate}}</date> &middot; commit {{sha .Patch.CommitSha}}</span>
+      </h3>
+
+      <div class="flex-collapse flex gap">
+        <div class="w-full" style="flex: 1 1 50%; min-width: 0;">
+          {{template "commit-list" .}}
+        </div>
+        <div class="w-full" style="flex: 1 1 50%; min-width: 0;">
+          {{template "patch-detail" .}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{template "patch-files" .}}
 </main>
 {{end}}

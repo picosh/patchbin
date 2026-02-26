@@ -1,0 +1,80 @@
+{{define "patch-detail"}}
+<div class="w-full flex-1" style="min-width: 0;">
+  <div class="group" id="{{.Patch.Url}}">
+    <div class="box border-visited flex justify-between items-center" id="{{.Patch.ID}}">
+      <a href="#patch-{{.Patch.ID}}">{{.Patch.Title}}</a>
+      <div>{{.Patch.AuthorName}} <code>{{.Patch.FormattedAuthorDate}}</code></div>
+    </div>
+    {{if .Patch.Body}}<pre class="w-full">{{.Patch.Body}}</pre>{{end}}
+
+    {{if .Patch.SemanticSummary.HasContent}}
+    {{template "semantic-summary" .Patch}}
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "patch-files"}}
+<div class="group">
+  {{range .Patch.PatchFiles}}
+    {{template "patch-file" .}}
+  {{end}}
+</div>
+
+<div><a href="#top" class="text-sm">Back to top</a></div>
+{{end}}
+
+{{define "semantic-summary"}}
+{{$summary := .SemanticSummary}}
+<details class="details-min semantic-summary" open>
+  <summary class="font-bold">Semantic diff summary</summary>
+  <div class="semantic-summary-totals text-sm">
+    <span class="semantic-diff-added-text">{{$summary.Added}} added</span>,
+    <span class="semantic-diff-modified-text">{{$summary.Modified}} modified</span>,
+    <span class="semantic-diff-signature_changed-text">{{$summary.SignatureChanged}} signature changed</span>,
+    <span class="semantic-diff-removed-text">{{$summary.Removed}} removed</span>
+    across {{$summary.AnalyzedFileCount}} analyzed file{{if ne $summary.AnalyzedFileCount 1}}s{{end}}
+    {{if $summary.SkippedFiles}}({{len $summary.SkippedFiles}} file{{if ne (len $summary.SkippedFiles) 1}}s{{end}} skipped: unsupported file type){{end}}
+  </div>
+  {{range .PatchFiles}}
+    {{if .SemanticChanges}}
+    <div class="semantic-summary-file">
+      <a href="#{{.FileAnchor}}" class="mono">{{.DisplayName}}</a>
+      <ul class="semantic-diff">
+        {{range .SemanticChanges}}
+        <li class="semantic-diff-{{.Kind}}">
+          <a href="#{{.HunkAnchor}}" class="semantic-diff-link" data-open-details="1">
+            <code class="semantic-diff-entity-kind">{{.EntityKind}}</code>
+            <code class="mono">{{.Name}}</code>
+            {{if eq (print .Kind) "added"}}added
+            {{else if eq (print .Kind) "removed"}}removed
+            {{else if eq (print .Kind) "signature_changed"}}signature changed
+            {{else}}modified
+            {{end}}
+          </a>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+  {{end}}
+</details>
+{{end}}
+
+{{define "patch-file"}}
+<details class="details-min" id="{{.FileAnchor}}">
+  <summary class="patch-file">
+    <code class="pill-success">+{{.Adds}}</code>
+    <code class="pill-admin">-{{.Dels}}</code>
+    <span class="mono ml">{{.DisplayName}}</span>
+    <a href="#{{.FileAnchor}}" class="file-link" title="link to file">#</a>
+  </summary>
+  {{if .IsBinary}}
+  <div class="w-full"><pre>Binaries are not rendered as diffs.</pre></div>
+  {{else}}
+    {{range .Hunks}}
+    <div class="w-full" id="{{.Anchor}}">{{.DiffText}}</div>
+    {{end}}
+  {{end}}
+</details>
+{{end}}

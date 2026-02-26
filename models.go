@@ -1,4 +1,4 @@
-package git
+package patchbin
 
 import (
 	"database/sql"
@@ -13,10 +13,8 @@ import (
 type Status string
 
 const (
-	StatusOpen     Status = "open"
-	StatusClosed   Status = "closed"
-	StatusAccepted Status = "accepted"
-	StatusReviewed Status = "reviewed"
+	StatusDraft Status = "draft"
+	StatusOpen  Status = "open"
 )
 
 // User is a db model for users.
@@ -37,27 +35,17 @@ type Acl struct {
 	CreatedAt  time.Time      `db:"created_at"`
 }
 
-// Repo is a container for patch requests.
-type Repo struct {
-	ID        int64     `db:"id"`
-	Name      string    `db:"name"`
-	UserID    int64     `db:"user_id"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
-}
-
 // PatchRequest is a database model for patches submitted to a Repo.
 type PatchRequest struct {
-	ID        int64     `db:"id"`
-	UserID    int64     `db:"user_id"`
-	RepoID    int64     `db:"repo_id"`
-	Name      string    `db:"name"`
-	Text      string    `db:"text"`
-	Status    Status    `db:"status"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
-	// only used for aggregate queries
-	LastUpdated string `db:"last_updated"`
+	ID           int64     `db:"id"`
+	UserID       int64     `db:"user_id"`
+	RepoName     string    `db:"repo_name"` // Plain string namespace
+	Name         string    `db:"name"`
+	Text         string    `db:"text"`
+	Status       Status    `db:"status"`
+	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
+	LastActivity time.Time `db:"last_activity"`
 }
 
 type Patchset struct {
@@ -96,7 +84,6 @@ func (p *Patch) CalcDiff() string {
 type EventLog struct {
 	ID             int64         `db:"id"`
 	UserID         int64         `db:"user_id"`
-	RepoID         sql.NullInt64 `db:"repo_id"`
 	PatchRequestID sql.NullInt64 `db:"patch_request_id"`
 	PatchsetID     sql.NullInt64 `db:"patchset_id"`
 	Event          string        `db:"event"`

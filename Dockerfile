@@ -22,7 +22,7 @@ ENV LDFLAGS="-s -w"
 
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 
-RUN go build -ldflags "$LDFLAGS" -o /go/bin/git-pr ./cmd/git-pr
+RUN go build -ldflags "$LDFLAGS" -o /go/bin/patchbin ./cmd/patchbin
 
 FROM scratch as release
 
@@ -30,6 +30,6 @@ WORKDIR /app
 ENV TERM="xterm-256color"
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /go/bin/git-pr ./git-pr
+COPY --from=builder /go/bin/patchbin ./patchbin
 
-CMD ["/app/git-pr"]
+CMD ["/app/patchbin"]

@@ -10,11 +10,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	git "github.com/picosh/git-pr"
+	"github.com/picosh/patchbin"
 )
 
 func main() {
-	fpath := flag.String("config", "git-pr.toml", "configuration toml file")
+	fpath := flag.String("config", "patchbin.toml", "configuration toml file")
 	flag.Parse()
 	opts := &slog.HandlerOptions{
 		AddSource: true,
@@ -22,12 +22,12 @@ func main() {
 	logger := slog.New(
 		slog.NewTextHandler(os.Stdout, opts),
 	)
-	git.LoadConfigFile(*fpath, logger)
-	cfg := git.NewGitCfg(logger)
+	patchbin.LoadConfigFile(*fpath, logger)
+	cfg := patchbin.NewGitCfg(logger)
 
 	// Web Server
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.WebPort)
-	web := git.GitWebServer(cfg)
+	web := patchbin.GitWebServer(cfg)
 	cfg.Logger.Info("starting web server", "addr", addr)
 	go func() {
 		if err := http.ListenAndServe(addr, web); err != nil {
@@ -38,7 +38,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// SSH Server
-	ssh := git.GitSshServer(ctx, cfg)
+	ssh := patchbin.GitSshServer(ctx, cfg)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)

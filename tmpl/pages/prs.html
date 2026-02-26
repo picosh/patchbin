@@ -1,0 +1,32 @@
+{{template "base" .}}
+
+{{define "title"}}PRs - patchbin{{end}}
+
+{{define "meta"}}
+<link rel="alternate" type="application/atom+xml"
+      title="RSS feed for git collaboration server"
+      href="/rss" />
+{{end}}
+
+{{define "body"}}
+<main class="group">
+  <div class="box-sm">
+    {{range .PRs}}
+    <div class="flex items-center justify-between gap py border-b">
+      <div class="flex items-center gap-2 flex-1" style="min-width: 0;">
+        <span class="pr-repo-col truncate mono text-sm" title="{{.RepoName}}">[{{.RepoName}}]</span>
+        <a href="/prs/{{.ID}}" class="flex-1 truncate">{{if .Name}}{{.Name}}{{else}}<em>(no title)</em>{{end}}</a>
+        {{if gt .NumPatchsets 1}}<code class="text-sm">{{.NumPatchsets}}</code>{{end}}
+      </div>
+      <div class="flex items-center gap mono text-sm">
+        <code class="text-sm">#{{.ID}}</code>
+        <span>{{.FormattedDate}}</span>
+        <a href="/prs/{{.ID}}/rss">rss</a>
+      </div>
+    </div>
+    {{else}}
+    <p>No {{.Tab}} patch requests found.</p>
+    {{end}}
+  </div>
+</main>
+{{end}}

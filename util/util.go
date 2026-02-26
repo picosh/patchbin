@@ -7,13 +7,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
 
 func CreateTmpDir() string {
-	tmp, err := os.MkdirTemp(os.TempDir(), "git-pr*")
+	tmp, err := os.MkdirTemp(os.TempDir(), "patchbin*")
 	if err != nil {
 		panic(err)
 	}
@@ -21,7 +22,7 @@ func CreateTmpDir() string {
 }
 
 func CreateCfgFile(dataDir, cfgTmpl string, adminKey UserSSH) string {
-	cfgPath := filepath.Join(dataDir, "git-pr.toml")
+	cfgPath := filepath.Join(dataDir, "patchbin.toml")
 	cfgFi, err := os.Create(cfgPath)
 	if err != nil {
 		panic(err)
@@ -93,6 +94,11 @@ func (s UserSSH) Cmd(patch []byte, cmd string) (string, error) {
 		return "", err
 	}
 
+	stderrPipe, err := session.StderrPipe()
+	if err != nil {
+		return "", err
+	}
+
 	if err := session.Start(cmd); err != nil {
 		return "", err
 	}
@@ -106,17 +112,28 @@ func (s UserSSH) Cmd(patch []byte, cmd string) (string, error) {
 
 	_ = stdinPipe.Close()
 
-	if err := session.Wait(); err != nil {
-		return "", err
-	}
+	var stdoutBuf, stderrBuf strings.Builder
+	go func() { _, _ = io.Copy(&stderrBuf, stderrPipe) }()
+	_, _ = io.Copy(&stdoutBuf, stdoutPipe)
 
-	buf := new(strings.Builder)
-	_, err = io.Copy(buf, stdoutPipe)
+	err = session.Wait()
+	stderr := stderrBuf.String()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("ssh command failed: %w (stderr: %s)", err, stderr)
 	}
 
-	return buf.String(), nil
+	return stdoutBuf.String(), nil
+}
+
+// ParsePRID extracts the PR ID from the output of `pr create`.
+// Looks for the URL line: "URL: https://host/prs/123"
+func ParsePRID(output string) string {
+	re := regexp.MustCompile(`/prs/(\d+)`)
+	matches := re.FindStringSubmatch(output)
+	if len(matches) < 2 {
+		return "1" // fallback
+	}
+	return matches[1]
 }
 
 func GenerateKeys() (UserSSH, UserSSH) {

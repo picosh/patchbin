@@ -1,9 +1,10 @@
-package git
+package patchbin
 
 import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +33,27 @@ func TestParsePatchsetWithCover(t *testing.T) {
 		if exp.Title != act.Title {
 			t.Fatalf("title does not match expected (expected:%s, actual:%s)", exp.Title, act.Title)
 		}
+	}
+}
+
+func TestParsePatchsetEmptyInput(t *testing.T) {
+	_, err := ParsePatchset(strings.NewReader(""))
+	if err == nil {
+		t.Fatal("expected error for empty patchset input, got nil")
+	}
+}
+
+func TestParsePatchsetWhitespaceOnlyInput(t *testing.T) {
+	_, err := ParsePatchset(strings.NewReader("   \n\n\t\n"))
+	if err == nil {
+		t.Fatal("expected error for whitespace-only patchset input, got nil")
+	}
+}
+
+func TestParsePatchsetGarbageInput(t *testing.T) {
+	_, err := ParsePatchset(strings.NewReader("this is not a patch\njust some random text\n"))
+	if err == nil {
+		t.Fatal("expected error for garbage patchset input, got nil")
 	}
 }
 

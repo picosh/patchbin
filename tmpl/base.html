@@ -9,11 +9,24 @@
     <meta name="keywords" content="git, collaboration, patch, requests" />
     {{template "meta" .}}
 
-    <link rel="stylesheet" href="/static/smol.css" />
-    <link rel="stylesheet" href="/static/git-pr.css" />
+    <link rel="stylesheet" href="/static/patchbin.css" />
     <link rel="stylesheet" href="/static/vars.css" />
     <link rel="stylesheet" href="/syntax.css" />
+    <script src="/static/semdiff.js" defer></script>
   </head>
-  <body>{{template "body" .}}</body>
+  <body>
+    <header class="box">
+      <div class="flex flex-col">
+        <nav class="flex gap flex-wrap">
+          <a class="btn-nav {{if eq .Tab ""}}btn-active{{end}}" href="/">patchbin</a>
+          <a class="btn-nav {{if eq .Tab "active"}}btn-active{{end}}" href="/prs/active">active</a>
+          <a class="btn-nav {{if eq .Tab "draft"}}btn-active{{end}}" href="/prs/draft">drafts</a>
+          <a class="btn-nav {{if eq .Tab "inactive"}}btn-active{{end}}" href="/prs/inactive">inactive</a>
+          <a class="btn-nav flex items-center" href="/rss">rss</a>
+        </nav>
+      </div>
+    </header>
+    {{template "body" .}}
+  </body>
 </html>
 {{end}}

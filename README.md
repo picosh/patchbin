@@ -1,209 +1,177 @@
-![git-pr-logo](logo.png)
+# patchbin
 
-# `pico/git-pr` a self-hosted git collaboration server
+A pastebin for patches, supercharged for git collaboration.
 
-We are trying to build the simplest git collaboration tool. The goal is to make
-self-hosting a git server as simple as running an SSH server -- all without
-sacrificing external collaborators time and energy.
+Contributions are designed to be anonymous: the quality of your work is what matters. No signup required, just connect with an SSH key.
 
-> `git format-patch` isn't the problem and pull requests aren't the solution.
+The target project doesn't need to run patchbin for someone to submit a patch request against it. It works like a pull request, except both sides collaborate by sending rounds of patchsets: a contributor sends patches, a reviewer replies with their own patches on top, back and forth, as commits rather than comments. The result is a collaborative workspace built entirely out of patches. Reviewing means pulling the code down, not clicking through a diff viewer. Issues work the same way: an issue is just a patch request without any code attached yet, and anyone can follow up with a real patch request on top of it.
 
-We are combining mailing list and pull request workflows. In order to build the
-simplest collaboration tool, we needed something as simple as generating patches
-but the ease-of-use of pull requests.
+There's no accept or reject step. A patch request is simply active or inactive: active ones go inactive after 30 days without activity. When a reviewer is happy with the code, they pull it, merge it, and push upstream themselves; there's nothing to manage here beyond that.
 
-The goal is not to create another code forge here. The goal is to create a very
-simple self-hosted git solution with the ability to collaborate with external
-contributors. All the code owner needs to setup a running git server:
+## quickstart
 
-- A single golang binary
+Submit a patch request (starts as a draft, visible only to you):
 
-All an external contributor needs is:
-
-- An SSH keypair
-- An SSH client
-
-# demo video
-
-https://youtu.be/d28Dih-BBUw
-
-# the problem
-
-Email is great as a decentralized system to send and receive changes (patchsets)
-to a git repo. However, onboarding a new user to a mailing list, properly
-setting up their email client, and then finally submitting the code contribution
-is enough to make many developers give up. Further, because we are leveraging
-the email protocol for collaboration, we are limited by its feature-set. For
-example, it is not possible to make edits to emails, everyone has a different
-client, those clients have different limitations around plain text email and
-downloading patches from it.
-
-Github pull requests are easy to use, easy to edit, and easy to manage. The
-downside is it forces the user to be inside their website to perform reviews.
-For quick changes, this is great, but when you start reading code within a web
-browser, there are quite a few downsides. At a certain point, it makes more
-sense to review code inside your local development environment, IDE, etc. There
-are tools and plugins that allow users to review PRs inside their IDE, but it
-requires a herculean effort to make it usable.
-
-Further, self-hosted solutions that mimic a pull request require a lot of
-infrastructure in order to manage it. A database, a web site connected to git,
-admin management, and services to manage it all. Another big point of friction:
-before an external user submits a code change, they first need to create an
-account and then login. This adds quite a bit of friction for a self-hosted
-solution, not only for an external contributor, but also for the code owner who
-has to provision the infra. Often times they also have to fork the repo within
-the code forge before submitting a PR. Then they never make a contribution ever
-again and a forked repo lingers. That seems silly.
-
-# introducing patch requests (PR)
-
-Instead, we want to create a self-hosted git "server" that can handle sending
-and receiving patches without the cumbersome nature of setting up email or the
-limitations imposed by the email protocol. Further, we want the primary workflow
-to surround the local development environment. Github is bringing the IDE to the
-browser in order to support their workflow, we want to flip that idea on its
-head by making code reviews a first-class citizen inside your local development
-environment. This has an interesting side-effect: the owner is placed in a more
-collaborative role because they must create at least one patch to submit a
-review. They are already in their local editor, they are already creating a git
-commit and "pushing" it, so naturally it is easier to make code changes during
-the review itself.
-
-We see this as a hybrid between the github workflow of a pull request and
-sending and receiving patches over email.
-
-The basic idea is to leverage an SSH app to handle most of the interaction
-between contributor and owner of a project. Everything can be done completely
-within the terminal, in a way that is ergonomic and fully featured.
-
-The web view is mostly for discovery.
-
-Notifications would happen with RSS and all state mutations would result in the
-generation of static web assets so the web views can be hosted using a simple
-web file server.
-
-## format-patch workflow
-
-```bash
-# Owner hosts repo `test.git` using github
-
-# Contributor clones repo
-git clone git@github.com:picosh/test.git
-
-# Contributor wants to make a change
-# Contributor makes changes via commits
-git add -A && git commit -m "fix: some bugs"
-
-# Contributor runs:
-git format-patch origin/main --stdout | ssh pr.pico.sh pr create test
-# > Patch Request has been created (ID: 1)
-
-# Owner can checkout patch:
-ssh pr.pico.sh pr print 1 | git am -3
-# Owner can comment (IN CODE), commit, then send another format-patch
-# on top of the PR:
-git format-patch origin/main --stdout | ssh pr.pico.sh pr add --review 1
-# UI clearly marks patch as a review
-
-# Contributor can checkout reviews
-ssh pr.pico.sh pr print 1 | git am -3
-
-# Owner can reject a pr:
-ssh pr.pico.sh pr close 1
-
-# Owner can accept a pr:
-ssh pr.pico.sh pr accept 1
-
-# Owner can prep PR for upstream:
-git rebase -i origin/main
-
-# Then push to upstream
-git push origin main
-
-# Done!
+```
+git format-patch main --stdout | ssh {url} pr create {repo}
 ```
 
-The fundamental collaboration tool here is `format-patch`. Whether you are
-submitting code changes or reviewing them, it all happens in code. Both
-contributor and owner are simply creating new commits and generating patches on
-top of each other. This obviates the need to have a web viewer where the
-reviewer can "comment" on a line of code block. There's no need, apply the
-contributor's patches, write comments or code changes, generate a new patch,
-send the patch to the git server as a "review." This flow also works the exact
-same if two users are collaborating on a set of changes.
+Open it so others can see it (also enables RSS notifications):
 
-This also solves the problem of sending multiple patchsets for the same code
-change. There's a single, central Patch Request where all changes and
-collaboration happens.
-
-We could figure out a way to leverage `git notes` for reviews / comments, but
-honestly, that solution feels brutal and outside the comfort level of most git
-users. Just send reviews as code and write comments in the programming language
-you are using. It's the job of the contributor to "address" those comments and
-then remove them in subsequent patches. This is the forcing function to address
-all comments: the patch won't be merged if there are comment unaddressed in
-code; they cannot be ignored or else they will be upstreamed erroneously.
-
-# installation and setup
-
-## setup
-
-[Copy](./git-pr.toml) or create a `git-pr.toml` file inside `./data` directory:
-
-```bash
-mkdir data
-vim ./data/git-pr.toml
-# configure file
+```
+ssh {url} pr open {prID}
 ```
 
-## docker
+Checkout the latest patchset from a patch request:
 
-Run the app image:
-
-```bash
-docker run -d -v ./data:/app/data ghcr.io/picosh/pico/git-pr:latest
+```
+ssh {url} print pr-{prID} | git am -3
 ```
 
-## golang
+Add a follow-up patchset (e.g. after addressing review comments):
 
-Clone this repo and then build the go binaries:
+```
+git format-patch main --stdout | ssh {url} pr add {prID}
+```
 
-```bash
+Help guide:
+
+```
+ssh {url} help
+```
+
+## commands
+
+### pr - manage patch requests
+
+- `pr create {repo}` - submit a new PR from stdin (starts as draft)
+  ```
+  git format-patch main --stdout | ssh {url} pr create {repo}
+  ```
+- `pr add {prID}` - add a new patchset to an existing PR from stdin
+  ```
+  git format-patch main --stdout | ssh {url} pr add {prID}
+  ```
+- `pr open {prID} [--comment]` - transition draft open, enables RSS notifications
+  ```
+  ssh {url} pr open {prID}
+  ```
+- `pr draft {prID} [--comment]` - transition open draft, disables RSS notifications
+  ```
+  ssh {url} pr draft {prID}
+  ```
+- `pr edit {prID} {title}` - rename a PR
+  ```
+  ssh {url} pr edit {prID} "new title"
+  ```
+- `pr summary {prID}` - show metadata, patchsets, and patches for a PR
+  ```
+  ssh {url} pr summary {prID}
+  ```
+- `pr ls [repo] [--draft|--open|--active|--inactive|--mine]` - list PRs
+  ```
+  ssh {url} pr ls {repo} --open
+  ```
+
+### issue - text-only patch requests
+
+- `issue create {repo} [--title]` - submit a new issue from stdin (starts as open)
+  ```
+  echo "steps to reproduce..." | ssh {url} issue create {repo} --title "bug: crash on startup"
+  ```
+
+### ps - manage patchsets
+
+- `ps rm {patchsetID}` - remove a patchset and its patches (creator only)
+  ```
+  ssh {url} ps rm ps-{patchsetID}
+  ```
+
+### print - print patches for checkout
+
+- `print pr-{prID}` - print the latest patchset for a PR
+  ```
+  ssh {url} print pr-{prID} | git am -3
+  ```
+- `print ps-{patchsetID}` - print a specific patchset
+  ```
+  ssh {url} print ps-{patchsetID} | git am -3
+  ```
+
+### logs - event history
+
+- `logs [--pr ID] [--pubkey]` - list event logs, optionally filtered to a PR or your own activity
+  ```
+  ssh {url} logs --pr {prID}
+  ```
+
+## self-hosting
+
+patchbin needs a `patchbin.toml` config file and a data directory (for the sqlite db and SSH host keys).
+
+[Copy](./patchbin.toml) or create a `patchbin.toml` file inside a `./data` directory:
+
+```
+mkdir -p data
+cp patchbin.toml ./data/patchbin.toml
+vim ./data/patchbin.toml
+```
+
+### docker-compose
+
+The included `docker-compose.yml` pulls the published image and mounts a local data directory:
+
+```
+services:
+  patchbin:
+    image: ghcr.io/picosh/pico/patchbin:latest
+    restart: always
+    volumes:
+      - ./data/patchbin/data:/app/data
+```
+
+Place `patchbin.toml` inside `./data/patchbin/data`, then run:
+
+```
+docker compose up -d
+```
+
+### docker image
+
+Run the image directly, mounting your data directory to `/app/data`:
+
+```
+docker run -d -v ./data:/app/data ghcr.io/picosh/pico/patchbin:latest
+```
+
+`patchbin.toml` must live inside the mounted `./data` directory, since that's the default config path the binary looks for.
+
+### from go source
+
+Clone the repo, then build and run the binary:
+
+```
 make build
+./build/patchbin --config ./data/patchbin.toml
 ```
 
-```bash
-./build/git-pr --config ./data/git-pr.toml
+Or without the Makefile:
+
+```
+go build -o ./build/patchbin ./cmd/patchbin
+./build/patchbin --config ./data/patchbin.toml
 ```
 
-## done!
+### done
 
-Access the ssh app:
+Access the SSH app:
 
-```bash
+```
 ssh -p 2222 localhost help
 ```
 
 Access the web app:
 
-```bash
+```
 curl localhost:3000
 ```
-
-# roadmap
-
-> [!IMPORTANT]\
-> This project is being actively developed and we have not reached alpha status
-> yet.
-
-1. Commenting system (git notes?)
-1. Support a `diff` workflow (convert `git diff` into mbox patch format)
-1. Moderation tooling
-1. Adapter to statically generate web view
-
-## ideas
-
-1. TUI?
-1. PR build steps? (e.g. ci/cd, status checks, merge checks)
-1. Bulk modify PRs? (rsync, sftp, sshfs)

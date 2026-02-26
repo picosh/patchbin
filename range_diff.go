@@ -1,4 +1,4 @@
-package git
+package patchbin
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 	ha "github.com/oddg/hungarian-algorithm"
-	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 var (
@@ -16,283 +15,22 @@ var (
 	RANGE_DIFF_CREATION_FACTOR_DEFAULT = 60
 )
 
-type PatchRange struct {
-	*Patch
-	Matching int
-	Diff     string
-	DiffSize int
-	Shown    bool
-}
-
-func NewPatchRange(patch *Patch) *PatchRange {
-	diff := patch.CalcDiff()
-	return &PatchRange{
-		Patch:    patch,
-		Matching: -1,
-		Diff:     diff,
-		DiffSize: len(diff),
-		Shown:    false,
-	}
-}
-
+// RangeDiffOutput represents a single commit comparison entry in the range diff.
 type RangeDiffOutput struct {
 	Header *RangeDiffHeader
 	Order  int
 	Files  []*RangeDiffFile
-	Type   string
+	Type   string // "rm", "add", "equal", "changed"
 }
 
-func output(a []*PatchRange, b []*PatchRange) []*RangeDiffOutput {
-	outputs := []*RangeDiffOutput{}
-	for i, patchA := range a {
-		if patchA.Matching == -1 {
-			hdr := NewRangeDiffHeader(patchA, nil, i+1, -1)
-			files := outputRemovedPatch(patchA)
-			outputs = append(
-				outputs,
-				&RangeDiffOutput{
-					Header: hdr,
-					Type:   "rm",
-					Order:  i + 1,
-					Files:  files,
-				},
-			)
-		}
-	}
-
-	for j, patchB := range b {
-		if patchB.Matching == -1 {
-			hdr := NewRangeDiffHeader(nil, patchB, -1, j+1)
-			files := outputAddedPatch(patchB)
-			outputs = append(
-				outputs,
-				&RangeDiffOutput{
-					Header: hdr,
-					Type:   "add",
-					Order:  j + 1,
-					Files:  files,
-				},
-			)
-			continue
-		}
-		patchA := a[patchB.Matching]
-		if patchB.ContentSha == patchA.ContentSha {
-			hdr := NewRangeDiffHeader(patchA, patchB, patchB.Matching+1, patchA.Matching+1)
-			outputs = append(
-				outputs,
-				&RangeDiffOutput{
-					Header: hdr,
-					Type:   "equal",
-					Order:  patchA.Matching + 1,
-				},
-			)
-		} else {
-			hdr := NewRangeDiffHeader(patchA, patchB, patchB.Matching+1, patchA.Matching+1)
-			diff := outputDiff(patchA, patchB)
-			outputs = append(
-				outputs,
-				&RangeDiffOutput{
-					Order:  patchA.Matching + 1,
-					Header: hdr,
-					Files:  diff,
-					Type:   "diff",
-				},
-			)
-		}
-	}
-	sort.Slice(outputs, func(i, j int) bool {
-		return outputs[i].Order < outputs[j].Order
-	})
-	return outputs
-}
-
-type RangeDiffDiff struct {
-	OuterType string
-	InnerType string
-	Text      string
-}
-
-func toRangeDiffDiff(diff []diffmatchpatch.Diff) []RangeDiffDiff {
-	result := []RangeDiffDiff{}
-
-	for _, line := range diff {
-		outerDiffType := line.Type
-
-		fmtLine := strings.Split(line.Text, "\n")
-		for idx, ln := range fmtLine {
-			text := ln
-			if idx < len(fmtLine)-1 {
-				text = ln + "\n"
-			}
-
-			// Determine inner type based on line prefix (+/-/space)
-			inner := "equal"
-			if strings.HasPrefix(text, "+") {
-				inner = "insert"
-			} else if strings.HasPrefix(text, "-") {
-				inner = "delete"
-			}
-
-			// Determine outer type based on diff result
-			outer := "equal"
-			switch outerDiffType {
-			case diffmatchpatch.DiffInsert:
-				outer = "insert"
-			case diffmatchpatch.DiffDelete:
-				outer = "delete"
-			}
-
-			st := RangeDiffDiff{
-				Text:      text,
-				OuterType: outer,
-				InnerType: inner,
-			}
-
-			result = append(result, st)
-		}
-	}
-
-	return result
-}
-
-func DoDiff(src, dst string) []RangeDiffDiff {
-	dmp := diffmatchpatch.New()
-	wSrc, wDst, warray := dmp.DiffLinesToChars(src, dst)
-	diffs := dmp.DiffMain(wSrc, wDst, false)
-	diffs = dmp.DiffCharsToLines(diffs, warray)
-	return toRangeDiffDiff(diffs)
-}
-
-// extractChangedLines extracts only added and deleted lines from a file's fragments,
-// ignoring context lines. This is used for comparing patches where context lines
-// may differ due to rebasing but the actual changes are the same.
-func extractChangedLines(file *gitdiff.File) string {
-	var result strings.Builder
-	for _, frag := range file.TextFragments {
-		for _, line := range frag.Lines {
-			if line.Op == gitdiff.OpAdd || line.Op == gitdiff.OpDelete {
-				result.WriteString(line.String())
-			}
-		}
-	}
-	return result.String()
-}
-
-// extractAllLines extracts all lines (including context) from a file's fragments.
-// This is used for displaying the full diff with context.
-func extractAllLines(file *gitdiff.File) string {
-	var result strings.Builder
-	for _, frag := range file.TextFragments {
-		for _, line := range frag.Lines {
-			result.WriteString(line.String())
-		}
-	}
-	return result.String()
-}
-
+// RangeDiffFile represents a file-level change between two matched commits.
 type RangeDiffFile struct {
-	OldFile *gitdiff.File
-	NewFile *gitdiff.File
-	Diff    []RangeDiffDiff
+	OldName string
+	NewName string
+	Type    string // "added", "removed", "changed"
 }
 
-func outputDiff(patchA, patchB *PatchRange) []*RangeDiffFile {
-	diffs := []*RangeDiffFile{}
-
-	for _, fileA := range patchA.Files {
-		found := false
-		for _, fileB := range patchB.Files {
-			if fileA.NewName == fileB.NewName {
-				found = true
-				// this means both files have been deleted so we should skip
-				if fileA.NewName == "" {
-					continue
-				}
-				// Compare only +/- lines to determine if there's a meaningful diff
-				changedA := extractChangedLines(fileA)
-				changedB := extractChangedLines(fileB)
-				if changedA == changedB {
-					// No difference in actual changes, skip this file
-					continue
-				}
-				// Use all lines (with context) for display
-				strA := extractAllLines(fileA)
-				strB := extractAllLines(fileB)
-				curDiff := DoDiff(strA, strB)
-				fp := &RangeDiffFile{
-					OldFile: fileA,
-					NewFile: fileB,
-					Diff:    curDiff,
-				}
-				diffs = append(diffs, fp)
-			}
-		}
-
-		// find files in patchA but not in patchB
-		if !found {
-			strA := extractAllLines(fileA)
-			fp := &RangeDiffFile{
-				OldFile: fileA,
-				NewFile: nil,
-				Diff:    DoDiff(strA, ""),
-			}
-			diffs = append(diffs, fp)
-		}
-	}
-
-	// find files in patchB not in patchA
-	for _, fileB := range patchB.Files {
-		found := false
-		for _, fileA := range patchA.Files {
-			if fileA.NewName == fileB.NewName {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			strB := extractAllLines(fileB)
-			fp := &RangeDiffFile{
-				OldFile: nil,
-				NewFile: fileB,
-				Diff:    DoDiff("", strB),
-			}
-			diffs = append(diffs, fp)
-		}
-	}
-
-	return diffs
-}
-
-func outputAddedPatch(patch *PatchRange) []*RangeDiffFile {
-	diffs := []*RangeDiffFile{}
-	for _, file := range patch.Files {
-		strB := extractAllLines(file)
-		fp := &RangeDiffFile{
-			OldFile: nil,
-			NewFile: file,
-			Diff:    DoDiff("", strB),
-		}
-		diffs = append(diffs, fp)
-	}
-	return diffs
-}
-
-func outputRemovedPatch(patch *PatchRange) []*RangeDiffFile {
-	diffs := []*RangeDiffFile{}
-	for _, file := range patch.Files {
-		strA := extractAllLines(file)
-		fp := &RangeDiffFile{
-			OldFile: file,
-			NewFile: nil,
-			Diff:    DoDiff(strA, ""),
-		}
-		diffs = append(diffs, fp)
-	}
-	return diffs
-}
-
-// RangeDiffHeader is a header combining old and new change pairs.
+// RangeDiffHeader is a header combining old and new commit pairs.
 type RangeDiffHeader struct {
 	OldIdx         int
 	OldSha         string
@@ -313,7 +51,8 @@ type RangeDiffHeader struct {
 	BodyChanged    bool
 }
 
-func NewRangeDiffHeader(a *PatchRange, b *PatchRange, aIndex, bIndex int) *RangeDiffHeader {
+// NewRangeDiffHeader creates a header from two patch ranges.
+func NewRangeDiffHeader(a, b *Patch, aIndex, bIndex int) *RangeDiffHeader {
 	hdr := &RangeDiffHeader{}
 	if a == nil {
 		hdr.NewIdx = bIndex
@@ -380,60 +119,222 @@ func (hdr *RangeDiffHeader) String() string {
 		)
 	}
 	return fmt.Sprintf(
-		"%d:  %s ! %d:  %s %s",
+		"%d:  %s ! %d:  %s %s\n",
 		hdr.OldIdx, truncateSha(hdr.OldSha),
 		hdr.NewIdx, truncateSha(hdr.NewSha),
 		hdr.Title,
 	)
 }
 
+// RangeDiff compares two patchsets and returns commit-level changes.
 func RangeDiff(a []*Patch, b []*Patch) []*RangeDiffOutput {
-	aPatches := []*PatchRange{}
-	for _, patch := range a {
-		aPatches = append(aPatches, NewPatchRange(patch))
+	aPatches := make([]*patchEntry, len(a))
+	for i, p := range a {
+		aPatches[i] = &patchEntry{Patch: p, Matching: -1, Size: patchSize(p)}
 	}
-	bPatches := []*PatchRange{}
-	for _, patch := range b {
-		bPatches = append(bPatches, NewPatchRange(patch))
+	bPatches := make([]*patchEntry, len(b))
+	for i, p := range b {
+		bPatches[i] = &patchEntry{Patch: p, Matching: -1, Size: patchSize(p)}
 	}
+
 	findExactMatches(aPatches, bPatches)
 	getCorrespondences(aPatches, bPatches, RANGE_DIFF_CREATION_FACTOR_DEFAULT)
-	return output(aPatches, bPatches)
+	return buildOutput(aPatches, bPatches)
 }
 
+// patchEntry wraps a Patch with matching state for the algorithm.
+type patchEntry struct {
+	*Patch
+	Matching int
+	Size     int
+}
+
+// patchSize returns a rough size metric for a patch (used for matching cost).
+func patchSize(p *Patch) int {
+	return len(p.RawText)
+}
+
+// buildOutput constructs the final range diff output from matched patches.
+func buildOutput(a []*patchEntry, b []*patchEntry) []*RangeDiffOutput {
+	outputs := []*RangeDiffOutput{}
+
+	// Removed commits (in A but not matched in B)
+	for i, patchA := range a {
+		if patchA.Matching == -1 {
+			hdr := NewRangeDiffHeader(patchA.Patch, nil, i+1, -1)
+			files := filesRemoved(patchA.Patch)
+			outputs = append(outputs, &RangeDiffOutput{
+				Header: hdr,
+				Type:   "rm",
+				Order:  i + 1,
+				Files:  files,
+			})
+		}
+	}
+
+	// Added or changed commits (from B side)
+	for j, entryB := range b {
+		if entryB.Matching == -1 {
+			// Added commit (in B but not matched in A)
+			hdr := NewRangeDiffHeader(nil, entryB.Patch, -1, j+1)
+			files := filesAdded(entryB.Patch)
+			outputs = append(outputs, &RangeDiffOutput{
+				Header: hdr,
+				Type:   "add",
+				Order:  j + 1,
+				Files:  files,
+			})
+			continue
+		}
+
+		entryA := a[entryB.Matching]
+		if entryB.ContentSha == entryA.ContentSha {
+			// Equal commits
+			hdr := NewRangeDiffHeader(entryA.Patch, entryB.Patch, entryB.Matching+1, entryA.Matching+1)
+			outputs = append(outputs, &RangeDiffOutput{
+				Header: hdr,
+				Type:   "equal",
+				Order:  entryA.Matching + 1,
+			})
+		} else {
+			// Changed commits
+			hdr := NewRangeDiffHeader(entryA.Patch, entryB.Patch, entryB.Matching+1, entryA.Matching+1)
+			files := filesChanged(entryA.Patch, entryB.Patch)
+			outputs = append(outputs, &RangeDiffOutput{
+				Order:  entryA.Matching + 1,
+				Header: hdr,
+				Files:  files,
+				Type:   "changed",
+			})
+		}
+	}
+
+	sort.Slice(outputs, func(i, j int) bool {
+		return outputs[i].Order < outputs[j].Order
+	})
+	return outputs
+}
+
+// fileContent extracts the diff content from a file for comparison.
+func fileContent(f *gitdiff.File) string {
+	var buf strings.Builder
+	for _, frag := range f.TextFragments {
+		for _, line := range frag.Lines {
+			buf.WriteString(line.String())
+		}
+	}
+	return buf.String()
+}
+
+// filesAdded returns a list of files added in the given patch.
+func filesAdded(p *Patch) []*RangeDiffFile {
+	files := []*RangeDiffFile{}
+	for _, f := range p.Files {
+		files = append(files, &RangeDiffFile{
+			NewName: f.NewName,
+			OldName: f.OldName,
+			Type:    "added",
+		})
+	}
+	return files
+}
+
+// filesRemoved returns a list of files removed from the given patch.
+func filesRemoved(p *Patch) []*RangeDiffFile {
+	files := []*RangeDiffFile{}
+	for _, f := range p.Files {
+		files = append(files, &RangeDiffFile{
+			NewName: f.NewName,
+			OldName: f.OldName,
+			Type:    "removed",
+		})
+	}
+	return files
+}
+
+// filesChanged returns a list of files that were added, removed, or changed
+// between two matched patches.
+func filesChanged(oldPatch, newPatch *Patch) []*RangeDiffFile {
+	files := []*RangeDiffFile{}
+
+	// Build lookup maps by new file name
+	oldFiles := map[string]*gitdiff.File{}
+	for _, f := range oldPatch.Files {
+		oldFiles[f.NewName] = f
+	}
+	newFiles := map[string]*gitdiff.File{}
+	for _, f := range newPatch.Files {
+		newFiles[f.NewName] = f
+	}
+
+	// Find changed and removed files
+	for name, oldFile := range oldFiles {
+		newFile, ok := newFiles[name]
+		if !ok {
+			// File removed
+			files = append(files, &RangeDiffFile{
+				OldName: oldFile.OldName,
+				Type:    "removed",
+			})
+		} else if fileContent(oldFile) != fileContent(newFile) {
+			// File changed
+			files = append(files, &RangeDiffFile{
+				OldName: oldFile.OldName,
+				NewName: newFile.NewName,
+				Type:    "changed",
+			})
+		}
+	}
+
+	// Find added files
+	for name, newFile := range newFiles {
+		if _, ok := oldFiles[name]; !ok {
+			files = append(files, &RangeDiffFile{
+				NewName: newFile.NewName,
+				OldName: newFile.OldName,
+				Type:    "added",
+			})
+		}
+	}
+
+	// Sort for deterministic output
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].NewName < files[j].NewName
+	})
+	return files
+}
+
+// RangeDiffToStr returns a simple string representation of the range diff.
 func RangeDiffToStr(diffs []*RangeDiffOutput) string {
-	output := ""
+	out := ""
 	for _, diff := range diffs {
-		output += diff.Header.String()
+		out += diff.Header.String()
 		for _, f := range diff.Files {
-			fileName := ""
-			if f.NewFile != nil {
-				fileName = f.NewFile.NewName
-			} else if f.OldFile != nil {
-				fileName = f.OldFile.NewName
+			name := f.NewName
+			if name == "" {
+				name = f.OldName
 			}
-			output += fmt.Sprintf("\n@@ %s\n", fileName)
-			for _, d := range f.Diff {
-				switch d.OuterType {
-				case "equal":
-					output += d.Text
-				case "insert":
-					output += d.Text
-				case "delete":
-					output += d.Text
-				}
+			switch f.Type {
+			case "added":
+				out += "  + " + name + "\n"
+			case "removed":
+				out += "  - " + name + "\n"
+			case "changed":
+				out += "  ~ " + name + "\n"
 			}
 		}
 	}
-	return output
+	return out
 }
 
-func findExactMatches(a []*PatchRange, b []*PatchRange) {
-	for i, patchA := range a {
-		for j, patchB := range b {
-			if patchA.ContentSha == patchB.ContentSha {
-				patchA.Matching = j
-				patchB.Matching = i
+// --- Matching algorithm (unchanged) ---
+
+func findExactMatches(a, b []*patchEntry) {
+	for i, entryA := range a {
+		for j, entryB := range b {
+			if entryA.ContentSha == entryB.ContentSha {
+				a[i].Matching = j
+				b[j].Matching = i
 			}
 		}
 	}
@@ -447,23 +348,17 @@ func createMatrix(rows, cols int) [][]int {
 	return mat
 }
 
-func diffsize(a *PatchRange, b *PatchRange) int {
-	dmp := diffmatchpatch.New()
-	diffs := dmp.DiffMain(a.Diff, b.Diff, false)
-	return len(diffs)
-}
-
-func getCorrespondences(a []*PatchRange, b []*PatchRange, creationFactor int) {
+func getCorrespondences(a, b []*patchEntry, creationFactor int) {
 	n := len(a) + len(b)
 	cost := createMatrix(n, n)
 
-	for i, patchA := range a {
-		var c int
-		for j, patchB := range b {
-			if patchA.Matching == j {
+	for i, entryA := range a {
+		for j, entryB := range b {
+			var c int
+			if entryA.Matching == j {
 				c = 0
-			} else if patchA.Matching == -1 && patchB.Matching == -1 {
-				c = diffsize(patchA, patchB)
+			} else if entryA.Matching == -1 && entryB.Matching == -1 {
+				c = absDiff(entryA.Size, entryB.Size)
 			} else {
 				c = COST_MAX
 			}
@@ -471,9 +366,9 @@ func getCorrespondences(a []*PatchRange, b []*PatchRange, creationFactor int) {
 		}
 	}
 
-	for j, patchB := range b {
-		creationCost := (patchB.DiffSize * creationFactor) / 100
-		if patchB.Matching >= 0 {
+	for j, entryB := range b {
+		creationCost := (entryB.Size * creationFactor) / 100
+		if entryB.Matching >= 0 {
 			creationCost = math.MaxInt32
 		}
 		for i := len(a); i < n; i++ {
@@ -495,4 +390,11 @@ func getCorrespondences(a []*PatchRange, b []*PatchRange, creationFactor int) {
 			b[j].Matching = i
 		}
 	}
+}
+
+func absDiff(a, b int) int {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }

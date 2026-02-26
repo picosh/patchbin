@@ -1,10 +1,11 @@
-package git
+package patchbin
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/picosh/pico/pkg/pssh"
 	"golang.org/x/crypto/ssh"
@@ -40,10 +41,16 @@ func GitSshServer(ctx context.Context, cfg *GitCfg) *pssh.SSHServer {
 		panic(fmt.Sprintf("cannot find database file, check folder and perms: %s: %s", dbpath, err))
 	}
 
+	interval, err := time.ParseDuration(cfg.RateLimitInterval)
+	if err != nil {
+		panic(fmt.Sprintf("invalid rate_limit_interval: %s: %s", cfg.RateLimitInterval, err))
+	}
+
 	be := &Backend{
-		DB:     dbh,
-		Logger: cfg.Logger,
-		Cfg:    cfg,
+		DB:      dbh,
+		Logger:  cfg.Logger,
+		Cfg:     cfg,
+		Limiter: NewRateLimiter(cfg.RateLimitCount, interval),
 	}
 
 	prCmd := &PrCmd{
@@ -53,7 +60,7 @@ func GitSshServer(ctx context.Context, cfg *GitCfg) *pssh.SSHServer {
 	server, err := pssh.NewSSHServerWithConfig(
 		ctx,
 		cfg.Logger,
-		"git-pr",
+		"patchbin",
 		cfg.Host,
 		cfg.SshPort,
 		cfg.PromPort,

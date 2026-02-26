@@ -1,4 +1,4 @@
-{{define "range-diff"}}
+{{define "range-diff"}}
 <div class="group">
   <div class="flex gap-2 collapse">
     <div class="group patchset-list" style="width: 350px;">
@@ -14,7 +14,7 @@
  
             <dt>description</dt>
             <dd>
-              <code class='{{if eq $diff.Type "rm"}}pill-admin{{else if eq $diff.Type "add"}}pill-success{{else if eq $diff.Type "diff"}}pill-review{{end}}'>
+              <code class='{{if eq $diff.Type "rm"}}pill-admin{{else if eq $diff.Type "add"}}pill-success{{else if eq $diff.Type "changed"}}pill-info{{end}}'>
               {{if eq $diff.Header.NewSha ""}}
                 Patch removed
               {{else if eq $diff.Header.OldSha ""}}
@@ -48,7 +48,7 @@
         {{range .PatchsetData.RangeDiff}}
           <div id="{{.Header.OldIdx}}-{{.Header.NewIdx}}">
             <div class="mb">
-              <code class='{{if eq .Type "rm"}}pill-admin{{else if eq .Type "add"}}pill-success{{else if eq .Type "diff"}}pill-review{{end}}'>
+              <code class='{{if eq .Type "rm"}}pill-admin{{else if eq .Type "add"}}pill-success{{else if eq .Type "changed"}}pill-info{{end}}'>
                 {{.Header}}
               </code>
             </div>

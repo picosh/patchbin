@@ -18,8 +18,8 @@ services:
       - "${GITPR_HTTP_V4:-80}:80"
       - "${GITPR_HTTPS_V6:-[::1]:443}:443"
       - "${GITPR_HTTP_V6:-[::1]:80}:80"
-  git-pr:
-    command: "/app/git-pr --config ${GITPR_CONFIG_PATH}"
+  patchbin:
+    command: "/app/patchbin --config ${GITPR_CONFIG_PATH}"
     networks:
       git:
         aliases:

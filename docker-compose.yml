@@ -1,6 +1,6 @@
 services:
-  git-pr:
-    image: ghcr.io/picosh/pico/git-pr:latest
+  patchbin:
+    image: ghcr.io/picosh/pico/patchbin:latest
     restart: always
     volumes:
-      - ./data/git-pr/data:/app/data
+      - ./data/patchbin/data:/app/data

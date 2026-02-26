@@ -1,5 +1,3 @@
 {{define "user-pill"}}
-<a href="/r/{{.Name}}">
-  <code class='pill{{if .IsAdmin}}-admin{{end}}' title="{{.Pubkey}}">{{.Name}}</code>
-</a>
+<code class='contributor-tag{{if .IsAdmin}}-admin{{end}}' title="{{.Pubkey}}">{{.Name}}</code>
 {{end}}

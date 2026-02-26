@@ -1,4 +1,4 @@
-package git
+package patchbin
 
 import (
 	"fmt"
@@ -17,19 +17,21 @@ import (
 var k = koanf.New(".")
 
 type GitCfg struct {
-	DataDir    string          `koanf:"data_dir"`
-	Url        string          `koanf:"url"`
-	Host       string          `koanf:"host"`
-	SshPort    string          `koanf:"ssh_port"`
-	WebPort    string          `koanf:"web_port"`
-	PromPort   string          `koanf:"prom_port"`
-	AdminsStr  []string        `koanf:"admins"`
-	Admins     []ssh.PublicKey `koanf:"admins_pk"`
-	CreateRepo string          `koanf:"create_repo"`
-	Theme      string          `koanf:"theme"`
-	TimeFormat string          `koanf:"time_format"`
-	Desc       string          `koanf:"desc"`
-	Logger     *slog.Logger
+	DataDir           string          `koanf:"data_dir"`
+	Url               string          `koanf:"url"`
+	Host              string          `koanf:"host"`
+	SshPort           string          `koanf:"ssh_port"`
+	WebPort           string          `koanf:"web_port"`
+	PromPort          string          `koanf:"prom_port"`
+	AdminsStr         []string        `koanf:"admins"`
+	Admins            []ssh.PublicKey `koanf:"admins_pk"`
+	Theme             string          `koanf:"theme"`
+	TimeFormat        string          `koanf:"time_format"`
+	Desc              string          `koanf:"desc"`
+	RateLimitCount    int             `koanf:"rate_limit_count"`
+	RateLimitInterval string          `koanf:"rate_limit_interval"`
+	MaxStdinBytes     int64           `koanf:"max_stdin_bytes"`
+	Logger            *slog.Logger
 }
 
 func LoadConfigFile(fpath string, logger *slog.Logger) {
@@ -67,7 +69,7 @@ func NewGitCfg(logger *slog.Logger) *GitCfg {
 			panic(fmt.Sprintf("could not parse authorized keys file: %v", err))
 		}
 	} else {
-		logger.Info("no admin specified in config so no one can submit a review!")
+		logger.Info("no admin specified in config")
 	}
 
 	// make datadir absolute
@@ -101,8 +103,16 @@ func NewGitCfg(logger *slog.Logger) *GitCfg {
 		out.TimeFormat = time.RFC3339
 	}
 
-	if out.CreateRepo == "" {
-		out.CreateRepo = "admin"
+	if out.RateLimitCount == 0 {
+		out.RateLimitCount = 10
+	}
+
+	if out.RateLimitInterval == "" {
+		out.RateLimitInterval = "1m"
+	}
+
+	if out.MaxStdinBytes == 0 {
+		out.MaxStdinBytes = 5 << 20 // 5MB
 	}
 
 	logger.Info(
@@ -114,8 +124,10 @@ func NewGitCfg(logger *slog.Logger) *GitCfg {
 		"web_port", out.WebPort,
 		"theme", out.Theme,
 		"time_format", out.TimeFormat,
-		"create_repo", out.CreateRepo,
 		"desc", out.Desc,
+		"rate_limit_count", out.RateLimitCount,
+		"rate_limit_interval", out.RateLimitInterval,
+		"max_stdin_bytes", out.MaxStdinBytes,
 	)
 
 	for _, pubkey := range out.AdminsStr {

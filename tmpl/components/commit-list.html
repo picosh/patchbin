@@ -1,0 +1,18 @@
+{{define "commit-list"}}
+<div class="commit-list text-sm">
+  {{$selectedID := .Patch.ID}}
+  {{range $idx, $patch := .Patches}}
+    <a class="commit-list-item flex justify-between items-center gap{{if eq $patch.ID $selectedID}} commit-list-item-active{{end}}"
+       href="/ps/{{$.Patchset.ID}}/patches/{{$patch.ID}}">
+      <span class="mono truncate" style="flex: 1;">
+        {{if eq $patch.ID $selectedID}}<span class="text-md" style="color: var(--success);">&rarr;</span> {{end}}{{$patch.Title}}
+      </span>
+      <div style="flex-shrink: 0;">{{$patch.AuthorName}} <code>{{$patch.FormattedAuthorDate}}</code></div>
+    </a>
+  {{else}}
+    <div class="box">
+      No patches found for patch request.
+    </div>
+  {{end}}
+</div>
+{{end}}

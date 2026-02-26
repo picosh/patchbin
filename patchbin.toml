@@ -1,0 +1,9 @@
+url = "localhost"            # used for help commands (exclude protocol)
+data_dir = "./data"          # loc for sqlite db, this toml file, and ssh host keys
+admins = []                  # list of admin ssh pubkeys
+time_format = "2006-01-02"   # set datetime format for our clients (golang datestr fmt)
+desc = ""                    # adds description box to top of index page (supports HTML)
+ssh_port = "2223"
+rate_limit_count = 10        # max submissions (pr create, pr add, issue create) per rate_limit_interval, global across all users
+rate_limit_interval = "1m"   # golang time.ParseDuration string, e.g. "1m", "30s", "1h"
+max_stdin_bytes = 5242880    # max stdin size (bytes) accepted for pr create, pr add, issue create

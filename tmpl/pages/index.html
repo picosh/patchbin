@@ -1,6 +1,6 @@
 {{template "base" .}}
 
-{{define "title"}}git-pr{{end}}
+{{define "title"}}patchbin{{end}}
 
 {{define "meta"}}
 <link rel="alternate" type="application/atom+xml"
@@ -9,254 +9,149 @@
 {{end}}
 
 {{define "body"}}
-<header class="group">
-  <h1 class="text-2xl">git-pr</h1>
-  <div>
-    <span>A pastebin supercharged for git collaboration</span> &middot;
-    <a href="https://github.com/picosh/git-pr">github</a> &middot;
-    <a href="https://youtu.be/d28Dih-BBUw">demo video</a>
-  </div>
+<main class="group">
+  <div class="flex justify-center items-center">
+    <div class="box container w-full group">
+      <h1 class="text-xl">A pastebin for patches, supercharged for git collaboration</h1>
 
-  {{if .MetaData.Desc}}
-  <div class="box-sm">
-    <div>{{.MetaData.Desc}}</div>
-  </div>
-  {{end}}
-
-  <details>
-    <summary>Intro</summary>
-
-    <div>
-      <p>
-        We are trying to build the simplest git collaboration tool. The goal is to make
-        self-hosting as simple as running an SSH server -- all without
-        sacrificing external collaborators time and energy.
-      </p>
-
-      <blockquote>
-        <code>git format-patch</code> isn't the problem and pull requests aren't the solution.
-      </blockquote>
-
-      <p>
-        We are combining mailing list and pull request workflows. In order to build the
-        simplest collaboration tool, we needed something as simple as generating patches
-        but the ease-of-use of pull requests.
-      </p>
-
-      <p>
-        The goal is not to create another code forge, the goal is to create a very
-        simple self-hosted git solution with the ability to collaborate with external
-        contributors. All the code owner needs to setup a running git server:
-      </p>
-
-      <ul><li>A single golang binary</li></ul>
+      {{if .MetaData.Desc}}
+      <div class="box-sm">
+        <div>{{.MetaData.Desc}}</div>
+      </div>
+      {{end}}
 
       <div>
-        All an external contributor needs is:
+        Contributions are designed to be anonymous: the quality of your work
+        is what matters. No signup required, just connect with an SSH key.
       </div>
 
-      <ul>
-        <li>An SSH keypair</li>
-        <li>An SSH client</li>
-      </ul>
-
-      <p>Then everyone subscribes to our RSS feeds to receive updates to patch requests.</p>
-
-      <h2 class="text-xl">the problem</h2>
-
-      <p>
-        Email is great as a decentralized system to send and receive changes (patchsets)
-        to a git repo. However, onboarding a new user to a mailing list, properly
-        setting up their email client, and then finally submitting the code contribution
-        is enough to make many developers give up. Further, because we are leveraging
-        the email protocol for collaboration, we are limited by its feature-set. For
-        example, it is not possible to make edits to emails, everyone has a different
-        client, those clients have different limitations around plain text email and
-        downloading patches from it.
-      </p>
-
-      <p>
-        Github pull requests are easy to use, easy to edit, and easy to manage. The
-        downside is it forces the user to be inside their website to perform reviews.
-        For quick changes, this is great, but when you start reading code within a web
-        browser, there are quite a few downsides. At a certain point, it makes more
-        sense to review code inside your local development environment, IDE, etc. There
-        are tools and plugins that allow users to review PRs inside their IDE, but it
-        requires a herculean effort to make it usable.
-      </p>
-
-      <p>
-        Further, self-hosted solutions that mimic a pull request require a lot of
-        infrastructure in order to manage it. A database, a web site connected to git,
-        admin management, and services to manage it all. Another big point of friction:
-        before an external user submits a code change, they first need to create an
-        account and then login. This adds quite a bit of friction for a self-hosted
-        solution, not only for an external contributor, but also for the code owner who
-        has to provision the infra. Often times they also have to fork the repo within
-        the code forge before submitting a PR. Then they never make a contribution ever
-        again and keep a forked repo around forever. That seems silly.
-      </p>
-
-      <h2 class="text-xl">introducing patch requests (PR)</h2>
-
-      <p>
-        Instead, we want to create a self-hosted git "server" that can handle sending
-        and receiving patches without the cumbersome nature of setting up email or the
-        limitations imposed by the email protocol. Further, we want the primary workflow
-        to surround the local development environment. Github is bringing the IDE to the
-        browser in order to support their workflow, we want to flip that idea on its
-        head by making code reviews a first-class citizen inside your local development
-        environment.
-      </p>
-
-      <p>
-        We see this as a hybrid between the github workflow of a pull request and
-        sending and receiving patches over email.
-      </p>
-
-      <p>
-        The basic idea is to leverage an SSH app to handle most of the interaction
-        between contributor and owner of a project. Everything can be done completely
-        within the terminal, in a way that is ergonomic and fully featured.
-      </p>
-
-      <p>
-        Notifications would happen with RSS and all state mutations would result in the
-        generation of static web assets so it can all be hosted using a simple file web
-        server.
-      </p>
-
-      <h3 class="text-lg">format-patch workflow</h3>
-
-      <p>
-        The fundamental collaboration tool here is <code>format-patch</code>. Whether you a
-        submitting code changes or you are reviewing code changes, it all happens in
-        code. Both contributor and owner are simply creating new commits and generating
-        patches on top of each other. This obviates the need to have a web viewer where
-        the reviewing can "comment" on a line of code block. There's no need, apply the
-        contributor's patches, write comments or code changes, generate a new patch,
-        send the patch to the git server as a "review." This flow also works the exact
-        same if two users are collaborating on a set of changes.
-      </p>
-
-      <p>
-        This also solves the problem of sending multiple patchsets for the same code
-        change. There's a single, central Patch Request where all changes and
-        collaboration happens.
-      </p>
-
-      <p>
-        We could figure out a way to leverage <code>git notes</code> for reviews / comments, but
-        honestly, that solution feels brutal and outside the comfort level of most git
-        users. Just send reviews as code and write comments in the programming language
-        you are using. It's the job of the contributor to "address" those comments and
-        then remove them in subsequent patches. This is the forcing function to address
-        all comments: the patch won't be merged if there are comment unaddressed in
-        code; they cannot be ignored or else they will be upstreamed erroneously.
-      </p>
-    </div>
-  </details>
-
-  <details>
-    <summary>How do Patch Requests work?</summary>
       <div>
-        Patch requests (PR) are the simplest way to submit, review, and accept changes to your git repository.
-        Here's how it works:
+        The target project doesn't need to run patchbin for someone to
+        submit a patch request against it. It works like a pull request,
+        except both sides collaborate by sending rounds of patchsets: a
+        contributor sends patches, a reviewer replies with their own patches
+        on top, back and forth, as commits rather than comments. The result
+        is a collaborative workspace built entirely out of patches.
+        Reviewing means pulling the code down, not clicking through a diff
+        viewer. Issues work the same way: an issue is just a patch request
+        without any code attached yet, and anyone can follow up with a real
+        patch request on top of it.
       </div>
 
-      <ol>
-        <li>External contributor clones repo (<code>git-clone</code>)</li>
-        <li>External contributor makes a code change (<code>git-add</code> & <code>git-commit</code>)</li>
-        <li>External contributor generates patches (<code>git-format-patch</code>)</li>
-        <li>External contributor submits a PR to SSH server</li>
-        <li>Owner receives RSS notification that there's a new PR</li>
-        <li>Owner applies patches locally (<code>git-am</code>) from SSH server</li>
-        <li>Owner makes suggestions in code! (<code>git-add</code> & <code>git-commit</code>)</li>
-        <li>Owner submits review by piping patch to SSH server (<code>git-format-patch</code>)</li>
-        <li>External contributor receives RSS notification of the PR review</li>
-        <li>External contributor re-applies patches (<code>git-am</code>)</li>
-        <li>External contributor reviews and removes comments in code!</li>
-        <li>External contributor submits another patch (<code>git-format-patch</code>)</li>
-        <li>Owner applies patches locally (<code>git-am</code>)</li>
-        <li>Owner marks PR as accepted and pushes code to main (<code>git-push</code>)</li>
-      </ol>
+      <div>
+        There's no accept or reject step. A patch request is simply active
+        or inactive: active ones go inactive after 30 days without activity.
+        When a reviewer is happy with the code, they pull it, merge it, and
+        push upstream themselves; there's nothing to manage here beyond that.
+      </div>
 
-      <div>Example commands</div>
+      <div class="group">
+        <h2>Quickstart</h2>
 
-      <pre># Owner hosts repo `test.git` using github
+        <div>
+          Submit a patch request (starts as a draft, visible only to you):
+        </div>
+        <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
 
-# Contributor clones repo
-git clone git@github.com:picosh/test.git
+        <div>Open it so others can see it (also enables RSS notifications):</div>
+        <pre class="m-0">ssh {{.MetaData.URL}} pr open {prID}</pre>
 
-# Contributor wants to make a change
-# Contributor makes changes via commits
-git add -A && git commit -m "fix: some bugs"
+        <div>Checkout the latest patchset from a patch request:</div>
+        <pre class="m-0">ssh {{.MetaData.URL}} print pr-{prID} | git am -3</pre>
 
-# Contributor runs:
-git format-patch origin/main --stdout | ssh {{.MetaData.URL}} pr create test
-# > Patch Request has been created (ID: 1)
+        <div>Add a follow-up patchset (e.g. after addressing review comments):</div>
+        <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
 
-# Owner can checkout patch:
-ssh {{.MetaData.URL}} pr print 1 | git am -3
+        <div>Help guide:</div>
+        <pre class="m-0">ssh {{.MetaData.URL}} help</pre>
+      </div>
 
-# Owner can comment (IN CODE), commit, then send another format-patch
-# on top of the PR:
-git format-patch origin/main --stdout | ssh {{.MetaData.URL}} pr add --review 1
-# UI clearly marks patch as a review
+      <div class="group">
+        <h2>Commands</h2>
 
-# Contributor can checkout reviews
-ssh {{.MetaData.URL}} print pr-1 | git am -3
+        <details class="details-min">
+          <summary class="font-bold">pr - manage patch requests</summary>
+          <div class="group my">
+            <div>
+              <code>pr create {repo}</code> - submit a new PR from stdin (starts as draft)
+              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
+            </div>
+            <div>
+              <code>pr add {prID}</code> - add a new patchset to an existing PR from stdin
+              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
+            </div>
+            <div>
+              <code>pr open {prID} [--comment]</code> - transition draft &rarr; open, enables RSS notifications
+              <pre class="m-0">ssh {{.MetaData.URL}} pr open {prID}</pre>
+            </div>
+            <div>
+              <code>pr draft {prID} [--comment]</code> - transition open &rarr; draft, disables RSS notifications
+              <pre class="m-0">ssh {{.MetaData.URL}} pr draft {prID}</pre>
+            </div>
+            <div>
+              <code>pr edit {prID} {title}</code> - rename a PR
+              <pre class="m-0">ssh {{.MetaData.URL}} pr edit {prID} "new title"</pre>
+            </div>
+            <div>
+              <code>pr summary {prID}</code> - show metadata, patchsets, and patches for a PR
+              <pre class="m-0">ssh {{.MetaData.URL}} pr summary {prID}</pre>
+            </div>
+            <div>
+              <code>pr ls [repo] [--draft|--open|--active|--inactive|--mine]</code> - list PRs
+              <pre class="m-0">ssh {{.MetaData.URL}} pr ls {repo} --open</pre>
+            </div>
+          </div>
+        </details>
 
-# Owner can reject a pr:
-ssh {{.MetaData.URL}} pr close 1
+        <details class="details-min">
+          <summary class="font-bold">issue - text-only patch requests</summary>
+          <div class="group my">
+            <div>
+              <code>issue create {repo} [--title]</code> - submit a new issue from stdin (starts as open)
+              <pre class="m-0">echo "steps to reproduce..." | ssh {{.MetaData.URL}} issue create {repo} --title "bug: crash on startup"</pre>
+            </div>
+          </div>
+        </details>
 
-# Owner can accept a pr:
-ssh {{.MetaData.URL}} pr accept 1
+        <details class="details-min">
+          <summary class="font-bold">ps - manage patchsets</summary>
+          <div class="group my">
+            <div>
+              <code>ps rm {patchsetID}</code> - remove a patchset and its patches (creator only)
+              <pre class="m-0">ssh {{.MetaData.URL}} ps rm ps-{patchsetID}</pre>
+            </div>
+          </div>
+        </details>
 
-# Owner can prep PR for upstream:
-git rebase -i origin/main
+        <details class="details-min">
+          <summary class="font-bold">print - print patches for checkout</summary>
+          <div class="group my">
+            <div>
+              <code>print pr-{prID}</code> - print the latest patchset for a PR
+              <pre class="m-0">ssh {{.MetaData.URL}} print pr-{prID} | git am -3</pre>
+            </div>
+            <div>
+              <code>print ps-{patchsetID}</code> - print a specific patchset
+              <pre class="m-0">ssh {{.MetaData.URL}} print ps-{patchsetID} | git am -3</pre>
+            </div>
+          </div>
+        </details>
 
-# Then push to upstream
-git push origin main
+        <details class="details-min">
+          <summary class="font-bold">logs - event history</summary>
+          <div class="group my">
+            <div>
+              <code>logs [--pr ID] [--pubkey]</code> - list event logs, optionally filtered to a PR or your own activity
+              <pre class="m-0">ssh {{.MetaData.URL}} logs --pr {prID}</pre>
+            </div>
+          </div>
+        </details>
+      </div>
 
-# Done!
-</pre>
-  </details>
-
-  <details>
-    <summary>First time user?</summary>
-
-    <div>
-      Using this service for the first time? First you need to create an account:
+      <div class="text-sm">
+        <a href="https://github.com/picosh/patchbin">Self-host your own patchbin</a>
+      </div>
     </div>
-
-    <blockquote>{username} is the name of your account</blockquote>
-
-    <pre>ssh {username}@{{.MetaData.URL}} register</pre>
-
-    <div>After that, creating a patch request is simple:</div>
-
-    <pre>git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
-
-    <div>Want to submit a v2 of the patch request?</div>
-
-    <pre>git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
-  </details>
-</header>
-
-<main>
-  <div>
-    filter
-    <a href="/">open</a> <code>{{.NumOpen}}</code>
-    &middot;
-    <a href="/?status=accepted">accepted</a> <code>{{.NumAccepted}}</code>
-    &middot;
-    <a href="/?status=closed">closed</a> <code>{{.NumClosed}}</code>
   </div>
-  {{template "pr-table" .Prs}}
 </main>
-
-<footer class="mt">
-  <a href="/rss">rss</a>
-</footer>
 {{end}}

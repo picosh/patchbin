@@ -1,74 +1,24 @@
-package git
+package patchbin
 
 import (
-	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/ssh"
 )
 
 type Backend struct {
-	Logger *slog.Logger
-	DB     *sqlx.DB
-	Cfg    *GitCfg
+	Logger  *slog.Logger
+	DB      *sqlx.DB
+	Cfg     *GitCfg
+	Limiter *RateLimiter
 }
 
-var ErrRepoNoNamespace = fmt.Errorf("repo must be namespaced by username")
-
-// Repo Namespace.
-func (be *Backend) CreateRepoNs(userName, repoName string) string {
-	if be.Cfg.CreateRepo == "admin" {
-		return repoName
-	}
-	return fmt.Sprintf("%s/%s", userName, repoName)
-}
-
-func (be *Backend) ValidateRepoNs(repoNs string) error {
-	_, repoID := be.SplitRepoNs(repoNs)
-	if strings.Contains(repoID, "/") {
-		return fmt.Errorf("repo can only contain a single forward-slash")
-	}
-	return nil
-}
-
-func (be *Backend) SplitRepoNs(repoNs string) (string, string) {
-	results := strings.SplitN(repoNs, "/", 2)
-	if len(results) == 1 {
-		return "", results[0]
-	}
-
-	return results[0], results[1]
-}
-
-func (be *Backend) CanCreateRepo(repo *Repo, requester *User) error {
-	pubkey, err := be.PubkeyToPublicKey(requester.Pubkey)
-	if err != nil {
-		return err
-	}
-	isAdmin := be.IsAdmin(pubkey)
-	if isAdmin {
-		return nil
-	}
-
-	// can create repo is a misnomer since we are saying it's ok to create
-	// a repo even though one already exists.  this is a hack since this function
-	// is used exclusively inside pr creation flow.
-	if repo != nil {
-		return nil
-	}
-
-	if be.Cfg.CreateRepo == "user" {
-		return nil
-	}
-
-	// new repo with cfg indicating only admins can create prs/repos
-	return fmt.Errorf("you are not authorized to create repo")
-}
-
+// Pubkey returns the standardized public key string for SSH.
 func (be *Backend) Pubkey(pk ssh.PublicKey) string {
 	return be.KeyForKeyText(pk)
 }
@@ -92,7 +42,7 @@ func (be *Backend) KeysEqual(pka, pkb string) bool {
 }
 
 func (be *Backend) PublicKeysEqual(a, b ssh.PublicKey) bool {
-	return bytes.Equal(a.Marshal(), b.Marshal())
+	return string(a.Marshal()) == string(b.Marshal())
 }
 
 func (be *Backend) IsAdmin(pk ssh.PublicKey) bool {
@@ -104,62 +54,9 @@ func (be *Backend) IsAdmin(pk ssh.PublicKey) bool {
 	return false
 }
 
-func (be *Backend) IsPrOwner(pka, pkb int64) bool {
-	return pka == pkb
-}
-
-type PrAcl struct {
-	CanModify      bool
-	CanDelete      bool
-	CanReview      bool
-	CanAddPatchset bool
-}
-
-func (be *Backend) GetPatchRequestAcl(repo *Repo, prq *PatchRequest, requester *User) *PrAcl {
-	acl := &PrAcl{}
-	if requester == nil {
-		return acl
-	}
-
-	pubkey, err := be.PubkeyToPublicKey(requester.Pubkey)
-	if err != nil {
-		return acl
-	}
-
-	isAdmin := be.IsAdmin(pubkey)
-	// admin can do it all
-	if isAdmin {
-		acl.CanModify = true
-		acl.CanReview = true
-		acl.CanDelete = true
-		acl.CanAddPatchset = true
-		return acl
-	}
-
-	// repo owner can do it all
-	if repo.UserID == requester.ID {
-		acl.CanModify = true
-		acl.CanReview = true
-		acl.CanDelete = true
-		acl.CanAddPatchset = true
-		return acl
-	}
-
-	// pr creator has special priv
-	if be.IsPrOwner(prq.UserID, requester.ID) {
-		acl.CanModify = true
-		acl.CanReview = false
-		acl.CanDelete = true
-		acl.CanAddPatchset = true
-		return acl
-	}
-
-	// otherwise no perms
-	acl.CanModify = false
-	acl.CanDelete = false
-	acl.CanReview = false
-	// anyone can add a patchset
-	acl.CanAddPatchset = true
-
-	return acl
+// ComputeUserName derives a username from an SSH public key.
+// Uses the first 8 characters of the SHA256 hash of the key.
+func (be *Backend) ComputeUserName(pubkey string) string {
+	hash := sha256.Sum256([]byte(pubkey))
+	return hex.EncodeToString(hash[:4])
 }

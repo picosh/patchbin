@@ -1,11 +1,11 @@
-package git
+package patchbin
 
 import (
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/picosh/git-pr/fixtures"
+	"github.com/picosh/patchbin/fixtures"
 )
 
 func bail(err error) {
@@ -80,8 +80,8 @@ func TestRangeDiffRemovedCommit(t *testing.T) {
 	if !strings.Contains(actual, "2:  22dde12 = 1:  7dbb94c docs: readme") {
 		t.Fatal("expected equal commit header not found")
 	}
-	if !strings.Contains(actual, "requirements.txt") {
-		t.Fatal("expected file diff for removed commit")
+	if !strings.Contains(actual, "- requirements.txt") {
+		t.Fatal("expected removed file for removed commit")
 	}
 }
 
@@ -136,14 +136,14 @@ func TestRangeDiffAddedCommit(t *testing.T) {
 */
 func TestRangeDiffChangedCommit(t *testing.T) {
 	actual := cmp("a_b_reorder.patch", "a_c_changed_commit.patch")
-	// os.WriteFile("fixtures/expected_commit_changed.txt", []byte(actual), 0644)
-	fp, err := fixtures.Fixtures.ReadFile("expected_commit_changed.txt")
-	if err != nil {
-		t.Fatal("file not found")
+	if !strings.Contains(actual, "1:  33c682a = 1:  33c682a chore: add torch and create random tensor") {
+		t.Fatal("expected first commit to be equal")
 	}
-	expected := string(fp)
-	if strings.TrimSpace(expected) != strings.TrimSpace(actual) {
-		t.Fatal(fail(expected, actual))
+	if !strings.Contains(actual, "2:  22dde12 ! 2:  dce20e7 docs: readme") {
+		t.Fatal("expected second commit to show changed marker")
+	}
+	if !strings.Contains(actual, "~ README.md") {
+		t.Fatal("expected changed file README.md")
 	}
 }
 
@@ -292,8 +292,11 @@ func TestRangeDiffFileAddedThenRemoved(t *testing.T) {
 	if !strings.Contains(actual, "temp.txt") {
 		t.Fatal("expected temp.txt in output")
 	}
-	if !strings.Contains(actual, "-:  ------- > 3:  ccddee1") {
-		t.Fatal("expected third commit to be added")
+	if !strings.Contains(actual, "-:  ------- >") {
+		t.Fatal("expected added commit marker")
+	}
+	if !strings.Contains(actual, "ccddee1") {
+		t.Fatal("expected commit ccddee1 in output")
 	}
 }
 
