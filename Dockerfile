@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.25 as builder-deps
+FROM golang:1.25 AS builder-deps
 LABEL maintainer="Pico Maintainers <hello@pico.sh>"
 
 WORKDIR /app
@@ -10,21 +10,16 @@ COPY go.* ./
 
 RUN go mod download
 
-FROM builder-deps as builder
+FROM builder-deps AS builder
 
 COPY . .
 
-ARG TARGETOS
-ARG TARGETARCH
-
-ENV CGO_ENABLED=0
+ENV CGO_ENABLED=1
 ENV LDFLAGS="-s -w"
-
-ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 
 RUN go build -ldflags "$LDFLAGS" -o /go/bin/patchbin ./cmd/patchbin
 
-FROM scratch as release
+FROM scratch AS release
 
 WORKDIR /app
 ENV TERM="xterm-256color"

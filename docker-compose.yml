@@ -1,6 +1,6 @@
 services:
   patchbin:
-    image: ghcr.io/picosh/pico/patchbin:latest
+    image: ghcr.io/picosh/patchbin:latest
     restart: always
     volumes:
       - ./data/patchbin/data:/app/data
