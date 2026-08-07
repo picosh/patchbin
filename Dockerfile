@@ -19,12 +19,13 @@ ENV LDFLAGS="-s -w"
 
 RUN go build -ldflags "$LDFLAGS" -o /go/bin/patchbin ./cmd/patchbin
 
-FROM scratch AS release
+FROM debian:bookworm-slim AS release
 
 WORKDIR /app
 ENV TERM="xterm-256color"
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /go/bin/patchbin ./patchbin
 
 CMD ["/app/patchbin"]
