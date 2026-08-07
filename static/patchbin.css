@@ -1,4 +1,4 @@
-*,
+*,
 ::before,
 ::after {
   box-sizing: border-box;
@@ -579,5 +579,3 @@ summary {
   width: 100%;
   max-width: 1500px;
 }
-ZMX_TASK_COMPLETED:0
-[erock@kings git-pr]$ 
