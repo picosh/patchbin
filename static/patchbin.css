@@ -62,6 +62,10 @@ strong {
   font-weight: bold;
 }
 
+hr {
+  margin: var(--grid-height) 0;
+}
+
 code,
 kbd,
 samp,
@@ -161,6 +165,11 @@ summary {
 
 .text-md {
   font-size: 1rem;
+}
+
+.text-lg, .text-xl {
+  font-size: 1.2rem;
+  font-family: monospace;
 }
 
 .flex {
@@ -447,39 +456,6 @@ summary {
   width: 100%;
 }
 
-@media only screen and (max-width: 40em) {
-  .collapse {
-    flex-direction: column;
-  }
-
-  .collapse > div {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  .patchset-list {
-    position: initial;
-  }
-
-  .flex-collapse {
-    flex-direction: column;
-  }
-
-  body {
-    padding-top: var(--line-height);
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
-
-  pre {
-    padding: var(--grid-height) 0;
-  }
-
-  header {
-    margin: 0;
-  }
-}
-
 .commit-list {
   display: flex;
   flex-direction: column;
@@ -578,4 +554,37 @@ summary {
 .patchset-split {
   width: 100%;
   max-width: 1500px;
+}
+
+@media only screen and (max-width: 40em) {
+  .collapse {
+    flex-direction: column;
+  }
+
+  .collapse > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .patchset-list {
+    position: initial;
+  }
+
+  .pr-repo-col {
+    display: none;
+  }
+
+  .flex-collapse {
+    flex-direction: column;
+  }
+
+  body {
+    padding-top: var(--line-height);
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  header {
+    margin: 0;
+  }
 }
