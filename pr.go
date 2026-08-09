@@ -26,7 +26,7 @@ type GitPatchRequest interface {
 	GetUserByPubkey(pubkey string) (*User, error)
 	UpsertUserByPubkey(pubkey string) (*User, error)
 	IsBanned(pubkey, ipAddress string) error
-	SubmitPatchRequest(userID int64, userPubkey string, repoName string, patchset io.Reader) (*PatchRequest, error)
+	SubmitPatchRequest(userID int64, userPubkey string, repoName string, status Status, patchset io.Reader) (*PatchRequest, error)
 	SubmitPatchset(prID, userID int64, op PatchsetOp, patchset io.Reader) ([]*Patch, error)
 	GetPatchRequestByID(prID int64) (*PatchRequest, error)
 	GetPatchRequests() ([]*PatchRequest, error)
@@ -404,8 +404,12 @@ func (cmd PrCmd) createPatch(tx *sqlx.Tx, patch *Patch) (int64, error) {
 	return patchID, err
 }
 
-// SubmitPatchRequest creates a new patch request with draft status.
-func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName string, patchset io.Reader) (*PatchRequest, error) {
+// SubmitPatchRequest creates a new patch request with the given status (draft or open).
+func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName string, status Status, patchset io.Reader) (*PatchRequest, error) {
+	if status == "" {
+		status = StatusDraft
+	}
+
 	tx, err := cmd.Backend.DB.Beginx()
 	if err != nil {
 		return nil, err
@@ -439,7 +443,7 @@ func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName st
 		repoName,
 		prName,
 		prText,
-		StatusDraft,
+		status,
 		now,
 		now,
 	)

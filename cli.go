@@ -266,9 +266,9 @@ COMMANDS
 
 pr - manage patch requests
 
-  pr create {repo}
-    Submit a new PR from stdin (starts as draft).
-    git format-patch main --stdout | ssh %[2]s pr create {repo}
+  pr create {repo} [--open]
+    Submit a new PR from stdin (starts as draft by default, or open with --open).
+    git format-patch main --stdout | ssh %[2]s pr create {repo} --open
 
   pr add {prID}
     Add a new patchset to an existing PR from stdin.
@@ -701,9 +701,19 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 					},
 					{
 						Name:      "create",
-						Usage:     "Submit a new PR (starts as draft)",
+						Usage:     "Submit a new PR (starts as draft by default)",
 						Args:      true,
 						ArgsUsage: "repoName",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "open",
+								Usage: "create PR directly in open status (enables RSS notifications)",
+							},
+							&cli.BoolFlag{
+								Name:  "draft",
+								Usage: "create PR in draft status (default)",
+							},
+						},
 						Action: func(cCtx *cli.Context) error {
 							if !be.Limiter.Allow() {
 								return be.Limiter.Error()
@@ -725,7 +735,12 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 								return fmt.Errorf("failed to read patchset from stdin: %w", err)
 							}
 
-							prq, err := pr.SubmitPatchRequest(user.ID, pubkey, repoName, bytes.NewReader(body))
+							status := StatusDraft
+							if cCtx.Bool("open") {
+								status = StatusOpen
+							}
+
+							prq, err := pr.SubmitPatchRequest(user.ID, pubkey, repoName, status, bytes.NewReader(body))
 							if err != nil {
 								return err
 							}
