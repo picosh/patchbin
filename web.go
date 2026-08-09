@@ -432,11 +432,9 @@ func GitWebServer(cfg *GitCfg) http.Handler {
 	mux.HandleFunc("GET /prs/active", ctxMdw(ctx, createPrListHandler("active")))
 	mux.HandleFunc("GET /prs/draft", ctxMdw(ctx, createPrListHandler("draft")))
 	mux.HandleFunc("GET /prs/inactive", ctxMdw(ctx, createPrListHandler("inactive")))
-	mux.HandleFunc("GET /prs/{id}", ctxMdw(ctx, createPrDetail("pr")))
-	mux.HandleFunc("GET /prs/{id}/patches/{patchID}", ctxMdw(ctx, createPrDetail("pr")))
+	mux.HandleFunc("GET /prs/{id}", ctxMdw(ctx, createPrDetail))
+	mux.HandleFunc("GET /prs/{id}/patches/{patchID}", ctxMdw(ctx, createPrDetail))
 	mux.HandleFunc("GET /prs/{id}/rss", ctxMdw(ctx, rssHandler))
-	mux.HandleFunc("GET /ps/{id}", ctxMdw(ctx, createPrDetail("ps")))
-	mux.HandleFunc("GET /ps/{id}/patches/{patchID}", ctxMdw(ctx, createPrDetail("ps")))
 	mux.HandleFunc("GET /rss", ctxMdw(ctx, rssHandler))
 
 	mux.HandleFunc("GET /", ctxMdw(ctx, indexHandler))

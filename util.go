@@ -15,10 +15,9 @@ import (
 )
 
 var (
-	baseCommitRe   = regexp.MustCompile(`base-commit: (.+)\s*`)
-	startOfPatch   = "From "
-	patchsetPrefix = "ps-"
-	prPrefix       = "pr-"
+	baseCommitRe = regexp.MustCompile(`base-commit: (.+)\s*`)
+	startOfPatch = "From "
+	prPrefix     = "pr-"
 )
 
 func truncateSha(sha string) string {
@@ -47,11 +46,78 @@ func GetAuthorizedKeys(pubkeys []string) ([]ssh.PublicKey, error) {
 	return keys, nil
 }
 
-func getFormattedPatchsetID(id int64) string {
-	if id == 0 {
+type ParsedID struct {
+	PrID int64
+	Rev  int // 1-indexed revision number within PR, or 0 if latest
+}
+
+func ParseID(raw string) (ParsedID, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ParsedID{}, fmt.Errorf("empty ID")
+	}
+
+	s := strings.TrimPrefix(raw, "pr-")
+
+	if strings.Contains(s, ".") {
+		parts := strings.SplitN(s, ".", 2)
+		prID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return ParsedID{}, fmt.Errorf("invalid PR ID in %q", raw)
+		}
+		revStr := strings.TrimPrefix(parts[1], "v")
+		rev, err := strconv.Atoi(revStr)
+		if err != nil {
+			return ParsedID{}, fmt.Errorf("invalid revision in %q", raw)
+		}
+		return ParsedID{PrID: prID, Rev: rev}, nil
+	}
+
+	prID, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return ParsedID{}, fmt.Errorf("invalid ID format: %s", raw)
+	}
+	return ParsedID{PrID: prID, Rev: 0}, nil
+}
+
+func GetPatchsetByParsedID(gpr GitPatchRequest, parsed ParsedID) (*Patchset, error) {
+	patchsets, err := gpr.GetPatchsetsByPrID(parsed.PrID)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed.Rev == 0 {
+		return patchsets[len(patchsets)-1], nil
+	}
+
+	if parsed.Rev < 1 || parsed.Rev > len(patchsets) {
+		return nil, fmt.Errorf("revision %d does not exist for PR pr-%d (PR has %d revision(s))", parsed.Rev, parsed.PrID, len(patchsets))
+	}
+
+	return patchsets[parsed.Rev-1], nil
+}
+
+func getPatchsetRev(gpr GitPatchRequest, patchset *Patchset) int {
+	if patchset == nil {
+		return 0
+	}
+	patchsets, err := gpr.GetPatchsetsByPrID(patchset.PatchRequestID)
+	if err != nil {
+		return 0
+	}
+	for idx, ps := range patchsets {
+		if ps.ID == patchset.ID {
+			return idx + 1
+		}
+	}
+	return 0
+}
+
+func getFormattedPatchsetID(prID int64, rev int) string {
+	if prID == 0 || rev == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%s%d", patchsetPrefix, id)
+	return fmt.Sprintf("%d.%d", prID, rev)
 }
 
 func getPrID(prID string) (int64, error) {
@@ -60,14 +126,6 @@ func getPrID(prID string) (int64, error) {
 		return 0, err
 	}
 	return int64(recID), nil
-}
-
-func getPatchsetID(patchsetID string) (int64, error) {
-	psID, err := strconv.Atoi(strings.Replace(patchsetID, patchsetPrefix, "", 1))
-	if err != nil {
-		return 0, err
-	}
-	return int64(psID), nil
 }
 
 func splitPatchSet(patchset string) []string {

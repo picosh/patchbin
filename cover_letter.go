@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -31,10 +32,34 @@ var patchsetEventTypes = map[string]bool{
 
 // BuildDiscussion formats event logs into a plain-text discussion thread.
 // Uses SSH pubkey fingerprints for user identity.
-// Interleaves "Submitted revision ps-X" lines for patchset events.
+// Interleaves "Submitted revision pr-X.Y" lines for patchset events.
 func BuildDiscussion(events []*EventLog, users map[int64]*User) string {
 	if len(events) == 0 {
 		return ""
+	}
+
+	// Map patchset IDs to formatted revision strings (e.g. pr-1.1, pr-1.2)
+	psRevs := make(map[int64]string)
+	psIDs := []int64{}
+	var prID int64
+	for _, event := range events {
+		if event.PatchRequestID.Valid && event.PatchRequestID.Int64 > 0 {
+			prID = event.PatchRequestID.Int64
+		}
+		if patchsetEventTypes[event.Event] && event.PatchsetID.Valid && event.PatchsetID.Int64 > 0 {
+			id := event.PatchsetID.Int64
+			if !slices.Contains(psIDs, id) {
+				psIDs = append(psIDs, id)
+			}
+		}
+	}
+	slices.Sort(psIDs)
+	for idx, id := range psIDs {
+		if prID > 0 {
+			psRevs[id] = fmt.Sprintf("%d.%d", prID, idx+1)
+		} else {
+			psRevs[id] = fmt.Sprintf("v%d", idx+1)
+		}
 	}
 
 	var buf strings.Builder
@@ -49,9 +74,12 @@ func BuildDiscussion(events []*EventLog, users map[int64]*User) string {
 
 		// Insert revision marker for patchset events
 		if patchsetEventTypes[event.Event] && event.PatchsetID.Valid {
-			ps := fmt.Sprintf("ps-%d", event.PatchsetID.Int64)
+			revStr := psRevs[event.PatchsetID.Int64]
+			if revStr == "" {
+				revStr = fmt.Sprintf("v%d", event.PatchsetID.Int64)
+			}
 			fmt.Fprintf(&buf, "[%s] %s:\n", ts, fp)
-			fmt.Fprintf(&buf, "  Submitted revision %s\n\n", ps)
+			fmt.Fprintf(&buf, "  Submitted revision %s\n\n", revStr)
 		}
 
 		comment := event.Data.Comment

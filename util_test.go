@@ -89,3 +89,44 @@ func TestPatchToDiff(t *testing.T) {
 		t.Fatal("diff does not match expected")
 	}
 }
+
+func TestParseID(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected ParsedID
+		wantErr  bool
+	}{
+		{input: "pr-1", expected: ParsedID{PrID: 1, Rev: 0}},
+		{input: "1", expected: ParsedID{PrID: 1, Rev: 0}},
+		{input: "pr-12.3", expected: ParsedID{PrID: 12, Rev: 3}},
+		{input: "12.3", expected: ParsedID{PrID: 12, Rev: 3}},
+		{input: "pr-5.v2", expected: ParsedID{PrID: 5, Rev: 2}},
+		{input: "invalid", wantErr: true},
+		{input: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		got, err := ParseID(tt.input)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("ParseID(%q) expected error, got nil", tt.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("ParseID(%q) unexpected error: %v", tt.input, err)
+			}
+			if got != tt.expected {
+				t.Errorf("ParseID(%q) = %+v, expected %+v", tt.input, got, tt.expected)
+			}
+		}
+	}
+}
+
+func TestGetFormattedPatchsetID(t *testing.T) {
+	if got := getFormattedPatchsetID(1, 2); got != "1.2" {
+		t.Errorf("expected 1.2, got %q", got)
+	}
+	if got := getFormattedPatchsetID(0, 2); got != "" {
+		t.Errorf("expected empty string, got %q", got)
+	}
+}

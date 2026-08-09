@@ -78,19 +78,20 @@ func readStdinLimited(r io.Reader, maxBytes int64) ([]byte, error) {
 }
 
 func getPatchsetFromOpt(patchsets []*Patchset, optPatchsetID string) (*Patchset, error) {
+	if len(patchsets) == 0 {
+		return nil, fmt.Errorf("no patchsets found")
+	}
 	if optPatchsetID == "" {
 		return patchsets[len(patchsets)-1], nil
 	}
 
-	id, err := getPatchsetID(optPatchsetID)
+	parsed, err := ParseID(optPatchsetID)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, ps := range patchsets {
-		if ps.ID == id {
-			return ps, nil
-		}
+	if parsed.Rev > 0 && parsed.Rev <= len(patchsets) {
+		return patchsets[parsed.Rev-1], nil
 	}
 
 	return nil, fmt.Errorf("cannot find patchset: %s", optPatchsetID)
@@ -120,7 +121,7 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 	sesh.Printf("%s▸ Patchsets%s %s(%d total)%s\n", ansiBold, ansiReset, ansiGray, len(patchsets), ansiReset)
 	formatTable(sesh, func(w io.Writer) {
 		_, _ = fmt.Fprintln(w, "  ID\tUser\tDate")
-		for _, patchset := range patchsets {
+		for idx, patchset := range patchsets {
 			user, err := pr.GetUserByID(patchset.UserID)
 			if err != nil {
 				be.Logger.Error("cannot find user for patchset", "err", err)
@@ -131,7 +132,7 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 			_, _ = fmt.Fprintf(
 				w,
 				"  %s\t%s\t%s\n",
-				getFormattedPatchsetID(patchset.ID),
+				getFormattedPatchsetID(request.ID, idx+1),
 				displayName,
 				patchset.CreatedAt.Format(be.Cfg.TimeFormat),
 			)
@@ -148,7 +149,7 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 		return err
 	}
 
-	latestPsID := getFormattedPatchsetID(latest.ID)
+	latestPsID := getFormattedPatchsetID(request.ID, len(patchsets))
 	sesh.Printf("\n%s▸ Patches%s %s(latest: %s)%s\n", ansiBold, ansiReset, ansiGray, latestPsID, ansiReset)
 
 	formatTable(sesh, func(w io.Writer) {
@@ -173,43 +174,8 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 	return nil
 }
 
-// printCoverLetterFromPrID prints patches with a cover letter and discussion.
-func printCoverLetterFromPrID(sesh *pssh.SSHServerConnSession, be *Backend, gpr GitPatchRequest, prID int64) error {
-	pr, err := gpr.GetPatchRequestByID(prID)
-	if err != nil {
-		return err
-	}
-
-	patchsets, err := gpr.GetPatchsetsByPrID(prID)
-	if err != nil {
-		return err
-	}
-	ps := patchsets[len(patchsets)-1]
-
-	patches, err := gpr.GetPatchesByPatchsetID(ps.ID)
-	if err != nil {
-		return err
-	}
-
-	events, err := gpr.GetEventLogsByPrID(prID)
-	if err != nil {
-		return err
-	}
-
-	users := resolveUsers(gpr, events)
-
-	mbox := GenerateMboxWithCoverLetter(pr, patches, events, users, be.Cfg.Url)
-	sesh.Println(mbox)
-	return nil
-}
-
-// printCoverLetterFromPsID prints patches with a cover letter and discussion.
-func printCoverLetterFromPsID(sesh *pssh.SSHServerConnSession, be *Backend, gpr GitPatchRequest, psID int64) error {
-	ps, err := gpr.GetPatchsetByID(psID)
-	if err != nil {
-		return err
-	}
-
+// printCoverLetterForPatchset prints patches with a cover letter and discussion.
+func printCoverLetterForPatchset(sesh *pssh.SSHServerConnSession, be *Backend, gpr GitPatchRequest, ps *Patchset) error {
 	pr, err := gpr.GetPatchRequestByID(ps.PatchRequestID)
 	if err != nil {
 		return err
@@ -302,19 +268,19 @@ issue - text-only patch requests (no code required)
 
 ps - manage patchsets
 
-  ps rm {patchsetID}
+  ps rm {prID.rev}
     Remove a patchset and its patches (creator only).
-    ssh %[2]s ps rm ps-{patchsetID}
+    ssh %[2]s ps rm {prID}.{rev}
 
 print - print patches for checkout
 
-  print pr-{prID}
+  print {prID}
     Print the latest patchset for a PR.
-    ssh %[2]s print pr-{prID} | git am -3
+    ssh %[2]s print {prID} | git am -3
 
-  print ps-{patchsetID}
-    Print a specific patchset.
-    ssh %[2]s print ps-{patchsetID} | git am -3
+  print {prID}.{rev}
+    Print a specific patchset revision.
+    ssh %[2]s print {prID}.{rev} | git am -3
 
   Cover letters are stored as an empty commit. If you want to keep them
   when applying, use "git am --keep-empty" (or set it globally with
@@ -482,7 +448,13 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 
 							psIDStr := "-"
 							if eventLog.PatchsetID.Valid && eventLog.PatchsetID.Int64 > 0 {
-								psIDStr = getFormattedPatchsetID(eventLog.PatchsetID.Int64)
+								ps, err := pr.GetPatchsetByID(eventLog.PatchsetID.Int64)
+								if err == nil {
+									rev := getPatchsetRev(pr, ps)
+									psIDStr = getFormattedPatchsetID(ps.PatchRequestID, rev)
+								} else {
+									psIDStr = fmt.Sprintf("v%d", eventLog.PatchsetID.Int64)
+								}
 							}
 
 							_, _ = fmt.Fprintf(
@@ -507,19 +479,19 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 						Name:      "rm",
 						Usage:     "Remove a patchset and its patches",
 						Args:      true,
-						ArgsUsage: "[patchsetID]",
+						ArgsUsage: "[X.Y]",
 						Action: func(cCtx *cli.Context) error {
 							args := cCtx.Args()
 							if !args.Present() {
-								return fmt.Errorf("must provide a patchset ID")
+								return fmt.Errorf("must provide a patchset ID (e.g. 1.2)")
 							}
 
-							patchsetID, err := getPatchsetID(args.First())
+							parsed, err := ParseID(args.First())
 							if err != nil {
 								return err
 							}
 
-							patchset, err := pr.GetPatchsetByID(patchsetID)
+							patchset, err := GetPatchsetByParsedID(pr, parsed)
 							if err != nil {
 								return err
 							}
@@ -533,11 +505,13 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 								return fmt.Errorf("you are not authorized to delete this patchset (only the creator can delete)")
 							}
 
-							err = pr.DeletePatchsetByID(user.ID, patchset.PatchRequestID, patchsetID)
+							err = pr.DeletePatchsetByID(user.ID, patchset.PatchRequestID, patchset.ID)
 							if err != nil {
 								return err
 							}
-							sesh.Printf("%s✔ Removed patchset ps-%d.%s\n", ansiGreen, patchsetID, ansiReset)
+
+							rev := getPatchsetRev(pr, patchset)
+							sesh.Printf("%s✔ Removed patchset %d.%d.%s\n", ansiGreen, patchset.PatchRequestID, rev, ansiReset)
 							return nil
 						},
 					},
@@ -547,31 +521,24 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 				Name:      "print",
 				Usage:     "Print patches in a patchset",
 				Args:      true,
-				ArgsUsage: "[pr-X] or [ps-X]",
+				ArgsUsage: "[X] or [X.Y]",
 				Action: func(cCtx *cli.Context) error {
 					args := cCtx.Args()
-					raw := args.First()
-					split := strings.Split(raw, "-")
-					if len(split) < 2 {
-						return fmt.Errorf("must provide ID in format: pr-X, ps-X")
+					if !args.Present() {
+						return fmt.Errorf("must provide ID in format: X or X.Y")
 					}
 
-					prefix := split[0]
-					id, err := strToInt(split[1])
+					parsed, err := ParseID(args.First())
 					if err != nil {
 						return err
 					}
 
-					switch prefix {
-					case "pr":
-						err = printCoverLetterFromPrID(sesh, be, pr, id)
-					case "ps":
-						err = printCoverLetterFromPsID(sesh, be, pr, id)
-					default:
-						return fmt.Errorf("unknown prefix %q, must be one of: pr, ps", prefix)
+					patchset, err := GetPatchsetByParsedID(pr, parsed)
+					if err != nil {
+						return err
 					}
 
-					return err
+					return printCoverLetterForPatchset(sesh, be, pr, patchset)
 				},
 			},
 			{

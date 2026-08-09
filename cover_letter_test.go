@@ -142,7 +142,7 @@ func TestBuildDiscussion(t *testing.T) {
 	}
 
 	// Should contain revision markers for patchset events
-	if !strings.Contains(discussion, "Submitted revision ps-3") {
+	if !strings.Contains(discussion, "Submitted revision 42.1") {
 		t.Fatalf("discussion should contain revision marker, got:\n%s", discussion)
 	}
 	// Revision marker should have pubkey fingerprint
@@ -188,15 +188,15 @@ func TestBuildDiscussion_RevisionMarkers(t *testing.T) {
 	discussion := BuildDiscussion(events, users)
 
 	// Should have revision markers interleaved with comments, same format as comments
-	if !strings.Contains(discussion, "Submitted revision ps-3") {
-		t.Fatal("should contain ps-3 revision marker")
+	if !strings.Contains(discussion, "Submitted revision 1.1") {
+		t.Fatal("should contain 1.1 revision marker")
 	}
-	if !strings.Contains(discussion, "Submitted revision ps-5") {
-		t.Fatal("should contain ps-5 revision marker")
+	if !strings.Contains(discussion, "Submitted revision 1.2") {
+		t.Fatal("should contain 1.2 revision marker")
 	}
 
 	// Revision markers should come before associated comments
-	ps3Idx := strings.Index(discussion, "Submitted revision ps-3")
+	ps3Idx := strings.Index(discussion, "Submitted revision 1.1")
 	updatedIdx := strings.Index(discussion, "Updated based on feedback")
 	if ps3Idx >= updatedIdx {
 		t.Fatal("revision marker should come before its comment")

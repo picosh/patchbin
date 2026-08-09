@@ -25,7 +25,7 @@ ssh {url} pr open {prID}
 Checkout the latest patchset from a patch request:
 
 ```
-ssh {url} print pr-{prID} | git am -3
+ssh {url} print {prID} | git am -3
 ```
 
 Add a follow-up patchset (e.g. after addressing review comments):
@@ -82,20 +82,20 @@ ssh {url} help
 
 ### ps - manage patchsets
 
-- `ps rm {patchsetID}` - remove a patchset and its patches (creator only)
+- `ps rm {prID}.{rev}` - remove a patchset and its patches (creator only)
   ```
-  ssh {url} ps rm ps-{patchsetID}
+  ssh {url} ps rm {prID}.{rev}
   ```
 
 ### print - print patches for checkout
 
-- `print pr-{prID}` - print the latest patchset for a PR
+- `print {prID}` - print the latest patchset for a PR
   ```
-  ssh {url} print pr-{prID} | git am -3
+  ssh {url} print {prID} | git am -3
   ```
-- `print ps-{patchsetID}` - print a specific patchset
+- `print {prID}.{rev}` - print a specific patchset revision
   ```
-  ssh {url} print ps-{patchsetID} | git am -3
+  ssh {url} print {prID}.{rev} | git am -3
   ```
 
 ### logs - event history

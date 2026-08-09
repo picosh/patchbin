@@ -57,7 +57,7 @@
         <pre class="m-0">ssh {{.MetaData.URL}} pr open {prID}</pre>
 
         <div>Checkout the latest patchset from a patch request:</div>
-        <pre class="m-0">ssh {{.MetaData.URL}} print pr-{prID} | git am -3</pre>
+        <pre class="m-0">ssh {{.MetaData.URL}} print {prID} | git am -3</pre>
 
         <div>Add a follow-up patchset (e.g. after addressing review comments):</div>
         <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
@@ -73,8 +73,8 @@
           <summary class="font-bold">pr - manage patch requests</summary>
           <div class="group my">
             <div>
-              <code>pr create {repo}</code> - submit a new PR from stdin (starts as draft)
-              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
+              <code>pr create {repo} [--open]</code> - submit a new PR from stdin (starts as draft by default, or open with --open)
+              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo} --open</pre>
             </div>
             <div>
               <code>pr add {prID}</code> - add a new patchset to an existing PR from stdin
@@ -104,7 +104,7 @@
         </details>
 
         <details class="details-min">
-          <summary class="font-bold">issue - text-only patch requests</summary>
+          <summary class="font-bold">issue - text-only patch requests (no code required)</summary>
           <div class="group my">
             <div>
               <code>issue create {repo} [--title]</code> - submit a new issue from stdin (starts as open)
@@ -117,8 +117,8 @@
           <summary class="font-bold">ps - manage patchsets</summary>
           <div class="group my">
             <div>
-              <code>ps rm {patchsetID}</code> - remove a patchset and its patches (creator only)
-              <pre class="m-0">ssh {{.MetaData.URL}} ps rm ps-{patchsetID}</pre>
+              <code>ps rm {prID.rev}</code> - remove a patchset and its patches (creator only)
+              <pre class="m-0">ssh {{.MetaData.URL}} ps rm {prID}.{rev}</pre>
             </div>
           </div>
         </details>
@@ -127,12 +127,12 @@
           <summary class="font-bold">print - print patches for checkout</summary>
           <div class="group my">
             <div>
-              <code>print pr-{prID}</code> - print the latest patchset for a PR
-              <pre class="m-0">ssh {{.MetaData.URL}} print pr-{prID} | git am -3</pre>
+              <code>print {prID}</code> - print the latest patchset for a PR
+              <pre class="m-0">ssh {{.MetaData.URL}} print {prID} | git am -3</pre>
             </div>
             <div>
-              <code>print ps-{patchsetID}</code> - print a specific patchset
-              <pre class="m-0">ssh {{.MetaData.URL}} print ps-{patchsetID} | git am -3</pre>
+              <code>print {prID}.{rev}</code> - print a specific patchset revision
+              <pre class="m-0">ssh {{.MetaData.URL}} print {prID}.{rev} | git am -3</pre>
             </div>
           </div>
         </details>

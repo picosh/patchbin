@@ -15,10 +15,10 @@ ID Repo Name                    Status  Patchsets User     Date
 
 [TestE2E - 3]
 Repo   PrID PatchsetID Event             Created Data
-test   1    ps-1       pr_created                
-test   1    ps-2       pr_patchset_added         
+test   1    1.1        pr_created                
+test   1    1.2        pr_patchset_added         
 test   1               pr_status_changed         {"status":"open"}
-test   1    ps-3       pr_patchset_added         
+test   1    1.3        pr_patchset_added         
 test   1               pr_status_changed         {"status":"open"}
 
 ---
