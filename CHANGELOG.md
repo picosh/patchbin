@@ -2,7 +2,7 @@
 
 Use spec: https://common-changelog.org/
 
-## Staged
+## v2026-08-09
 
 ### Added
 
@@ -25,6 +25,7 @@ Use spec: https://common-changelog.org/
 
 - All repo/user index pages (to be reintroduced later)
 - `create_repo` config field, which gated who could create repos (`admin` vs `user`); anyone can now create repos under the anonymous model
+- Replaced `pr-X` and `ps-Y` with `[prID].[rev]` to remove confusion around the different ids
 
 ### Fixed
 
