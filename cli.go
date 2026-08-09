@@ -13,8 +13,49 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	ansiReset  = "\033[0m"
+	ansiBold   = "\033[1m"
+	ansiGreen  = "\033[32m"
+	ansiYellow = "\033[33m"
+	ansiCyan   = "\033[36m"
+	ansiGray   = "\033[90m"
+)
+
+func formatStatus(status Status) string {
+	switch status {
+	case StatusDraft:
+		return fmt.Sprintf("%s[draft]%s", ansiYellow, ansiReset)
+	case StatusOpen:
+		return fmt.Sprintf("%s[open]%s", ansiGreen, ansiReset)
+	default:
+		return fmt.Sprintf("[%s]", status)
+	}
+}
+
+func formatTable(sesh io.Writer, render func(w io.Writer)) {
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	render(w)
+	_ = w.Flush()
+
+	lines := strings.Split(buf.String(), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		if i == 0 {
+			_, _ = fmt.Fprintf(sesh, "%s%s%s\n", ansiGray, line, ansiReset)
+		} else {
+			line = strings.ReplaceAll(line, "[draft]", fmt.Sprintf("%s[draft]%s", ansiYellow, ansiReset))
+			line = strings.ReplaceAll(line, "[open]", fmt.Sprintf("%s[open]%s", ansiGreen, ansiReset))
+			_, _ = fmt.Fprintln(sesh, line)
+		}
+	}
+}
+
 func NewTabWriter(out io.Writer) *tabwriter.Writer {
-	return tabwriter.NewWriter(out, 0, 0, 1, ' ', tabwriter.TabIndent)
+	return tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 }
 
 func strToInt(str string) (int64, error) {
@@ -61,45 +102,41 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 		return err
 	}
 
-	sesh.Printf("Info\n====\n")
-	sesh.Printf("URL: https://%s/prs/%d\n", be.Cfg.Url, prID)
-	sesh.Printf("Repo: %s\n\n", request.RepoName)
-
-	writer := NewTabWriter(sesh)
-	_, _ = fmt.Fprintln(writer, "ID\tName\tStatus\tDate")
-	_, _ = fmt.Fprintf(
-		writer,
-		"%d\t%s\t[%s]\t%s\n",
-		request.ID, request.Name, request.Status, request.CreatedAt.Format(be.Cfg.TimeFormat),
-	)
-	_ = writer.Flush()
+	statusBadge := formatStatus(request.Status)
+	sesh.Printf("%s● PR #%d%s  %s%s%s  %s\n", ansiBold, request.ID, ansiReset, ansiBold, request.Name, ansiReset, statusBadge)
+	sesh.Printf("  %sRepo:%s   %s\n", ansiGray, ansiReset, request.RepoName)
+	sesh.Printf("  %sURL:%s    https://%s/prs/%d\n", ansiGray, ansiReset, be.Cfg.Url, prID)
+	sesh.Printf("  %sDate:%s   %s\n", ansiGray, ansiReset, request.CreatedAt.Format(be.Cfg.TimeFormat))
+	if request.Status == StatusDraft {
+		sesh.Printf("  %sHint:%s   PR is draft! Run `pr open %d` to make it visible.\n", ansiCyan, ansiReset, prID)
+	}
+	sesh.Printf("\n")
 
 	patchsets, err := pr.GetPatchsetsByPrID(prID)
 	if err != nil {
 		return err
 	}
 
-	sesh.Printf("\nPatchsets\n====\n")
+	sesh.Printf("%s▸ Patchsets%s %s(%d total)%s\n", ansiBold, ansiReset, ansiGray, len(patchsets), ansiReset)
+	formatTable(sesh, func(w io.Writer) {
+		_, _ = fmt.Fprintln(w, "  ID\tUser\tDate")
+		for _, patchset := range patchsets {
+			user, err := pr.GetUserByID(patchset.UserID)
+			if err != nil {
+				be.Logger.Error("cannot find user for patchset", "err", err)
+				continue
+			}
+			displayName := be.ComputeUserName(user.Pubkey)
 
-	writerSet := NewTabWriter(sesh)
-	_, _ = fmt.Fprintln(writerSet, "ID\tUser\tDate")
-	for _, patchset := range patchsets {
-		user, err := pr.GetUserByID(patchset.UserID)
-		if err != nil {
-			be.Logger.Error("cannot find user for patchset", "err", err)
-			continue
+			_, _ = fmt.Fprintf(
+				w,
+				"  %s\t%s\t%s\n",
+				getFormattedPatchsetID(patchset.ID),
+				displayName,
+				patchset.CreatedAt.Format(be.Cfg.TimeFormat),
+			)
 		}
-		displayName := be.ComputeUserName(user.Pubkey)
-
-		_, _ = fmt.Fprintf(
-			writerSet,
-			"%s\t%s\t%s\n",
-			getFormattedPatchsetID(patchset.ID),
-			displayName,
-			patchset.CreatedAt.Format(be.Cfg.TimeFormat),
-		)
-	}
-	_ = writerSet.Flush()
+	})
 
 	latest, err := getPatchsetFromOpt(patchsets, "")
 	if err != nil {
@@ -111,25 +148,28 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 		return err
 	}
 
-	sesh.Printf("\nPatches from latest patchset\n====\n")
+	latestPsID := getFormattedPatchsetID(latest.ID)
+	sesh.Printf("\n%s▸ Patches%s %s(latest: %s)%s\n", ansiBold, ansiReset, ansiGray, latestPsID, ansiReset)
 
-	opatches := patches
-	w := NewTabWriter(sesh)
-	_, _ = fmt.Fprintln(w, "Idx\tTitle\tCommit\tAuthor\tDate")
-	for idx, patch := range opatches {
-		timestamp := patch.AuthorDate.Format(be.Cfg.TimeFormat)
-		_, _ = fmt.Fprintf(
-			w,
-			"%d\t%s\t%s\t%s <%s>\t%s\n",
-			idx,
-			patch.Title,
-			truncateSha(patch.CommitSha),
-			patch.AuthorName,
-			patch.AuthorEmail,
-			timestamp,
-		)
-	}
-	_ = w.Flush()
+	formatTable(sesh, func(w io.Writer) {
+		_, _ = fmt.Fprintln(w, "  #\tCommit\tAuthor\tDate\tTitle")
+		for idx, patch := range patches {
+			timestamp := patch.AuthorDate.Format(be.Cfg.TimeFormat)
+			author := patch.AuthorName
+			if patch.AuthorEmail != "" {
+				author = fmt.Sprintf("%s <%s>", patch.AuthorName, patch.AuthorEmail)
+			}
+			_, _ = fmt.Fprintf(
+				w,
+				"  %d\t%s\t%s\t%s\t%s\n",
+				idx,
+				truncateSha(patch.CommitSha),
+				author,
+				timestamp,
+				patch.Title,
+			)
+		}
+	})
 	return nil
 }
 
@@ -387,7 +427,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 								return err
 							}
 
-							sesh.Printf("Issue created! #%d\n", prq.ID)
+							sesh.Printf("%s✔ Issue #%d created!%s\n\n", ansiGreen, prq.ID, ansiReset)
 							return prSummary(be, pr, sesh, prq.ID)
 						},
 					},
@@ -426,20 +466,36 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 						return err
 					}
 
-					writer := NewTabWriter(sesh)
-					_, _ = fmt.Fprintln(writer, "PrID\tPatchsetID\tEvent\tCreated\tData")
-					for _, eventLog := range eventLogs {
-						_, _ = fmt.Fprintf(
-							writer,
-							"%d\t%s\t%s\t%s\t%s\n",
-							eventLog.PatchRequestID.Int64,
-							getFormattedPatchsetID(eventLog.PatchsetID.Int64),
-							eventLog.Event,
-							eventLog.CreatedAt.Format(be.Cfg.TimeFormat),
-							eventLog.Data,
-						)
+					sesh.Printf("%s▸ Event Logs%s\n\n", ansiBold, ansiReset)
+					if len(eventLogs) == 0 {
+						sesh.Printf("  %s(No event logs found)%s\n", ansiGray, ansiReset)
+						return nil
 					}
-					_ = writer.Flush()
+
+					formatTable(sesh, func(w io.Writer) {
+						_, _ = fmt.Fprintln(w, "  PrID\tPatchsetID\tEvent\tCreated\tData")
+						for _, eventLog := range eventLogs {
+							prIDStr := "-"
+							if eventLog.PatchRequestID.Valid && eventLog.PatchRequestID.Int64 > 0 {
+								prIDStr = fmt.Sprintf("%d", eventLog.PatchRequestID.Int64)
+							}
+
+							psIDStr := "-"
+							if eventLog.PatchsetID.Valid && eventLog.PatchsetID.Int64 > 0 {
+								psIDStr = getFormattedPatchsetID(eventLog.PatchsetID.Int64)
+							}
+
+							_, _ = fmt.Fprintf(
+								w,
+								"  %s\t%s\t%s\t%s\t%s\n",
+								prIDStr,
+								psIDStr,
+								eventLog.Event,
+								eventLog.CreatedAt.Format(be.Cfg.TimeFormat),
+								eventLog.Data,
+							)
+						}
+					})
 					return nil
 				},
 			},
@@ -481,7 +537,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							if err != nil {
 								return err
 							}
-							sesh.Printf("successfully removed patchset: %d\n", patchsetID)
+							sesh.Printf("%s✔ Removed patchset ps-%d.%s\n", ansiGreen, patchsetID, ansiReset)
 							return nil
 						},
 					},
@@ -573,8 +629,13 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							onlyMine := cCtx.Bool("mine")
 							cutoff := time.Now().AddDate(0, 0, -30)
 
-							writer := NewTabWriter(sesh)
-							_, _ = fmt.Fprintln(writer, "ID\tRepo\tName\tStatus\tPatchsets\tUser\tLast Activity")
+							if repoName == "" {
+								sesh.Printf("%s▸ Patch Requests%s\n\n", ansiBold, ansiReset)
+							} else {
+								sesh.Printf("%s▸ Patch Requests%s %s(%s)%s\n\n", ansiBold, ansiReset, ansiGray, repoName, ansiReset)
+							}
+
+							var matching []*PatchRequest
 							for _, req := range prs {
 								if onlyDraft && req.Status != StatusDraft {
 									continue
@@ -602,27 +663,39 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 									continue
 								}
 
-								patchsets, err := pr.GetPatchsetsByPrID(req.ID)
-								if err != nil {
-									be.Logger.Error("could not get patchsets for pr", "err", err)
-									continue
-								}
-
-								displayName := be.ComputeUserName(user.Pubkey)
-
-								_, _ = fmt.Fprintf(
-									writer,
-									"%d\t%s\t%s\t[%s]\t%d\t%s\t%s\n",
-									req.ID,
-									req.RepoName,
-									req.Name,
-									req.Status,
-									len(patchsets),
-									displayName,
-									req.LastActivity.Format(be.Cfg.TimeFormat),
-								)
+								matching = append(matching, req)
 							}
-							_ = writer.Flush()
+
+							if len(matching) == 0 {
+								sesh.Printf("  %s(No patch requests found)%s\n", ansiGray, ansiReset)
+								return nil
+							}
+
+							formatTable(sesh, func(w io.Writer) {
+								_, _ = fmt.Fprintln(w, "  ID\tRepo\tStatus\tPatchsets\tUser\tLast Activity\tTitle")
+								for _, req := range matching {
+									user, _ := pr.GetUserByID(req.UserID)
+									patchsets, err := pr.GetPatchsetsByPrID(req.ID)
+									if err != nil {
+										be.Logger.Error("could not get patchsets for pr", "err", err)
+										continue
+									}
+
+									displayName := be.ComputeUserName(user.Pubkey)
+
+									_, _ = fmt.Fprintf(
+										w,
+										"  %d\t%s\t[%s]\t%d\t%s\t%s\t%s\n",
+										req.ID,
+										req.RepoName,
+										req.Status,
+										len(patchsets),
+										displayName,
+										req.LastActivity.Format(be.Cfg.TimeFormat),
+										req.Name,
+									)
+								}
+							})
 							return nil
 						},
 					},
@@ -656,9 +729,6 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							if err != nil {
 								return err
 							}
-							sesh.Println(
-								"PR submitted as draft! Use `pr open <id>` to make it visible.",
-							)
 
 							return prSummary(be, pr, sesh, prq.ID)
 						},
@@ -707,7 +777,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							if err != nil {
 								return err
 							}
-							sesh.Printf("Opened PR %s (#%d)\n", prq.Name, prq.ID)
+							sesh.Printf("%s✔ Opened PR #%d (%s)%s\n\n", ansiGreen, prq.ID, prq.Name, ansiReset)
 							return prSummary(be, pr, sesh, prID)
 						},
 					},
@@ -755,7 +825,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							if err != nil {
 								return err
 							}
-							sesh.Printf("Drafted PR %s (#%d)\n", prq.Name, prq.ID)
+							sesh.Printf("%s✔ Set PR #%d (%s) to draft.%s\n\n", ansiGreen, prq.ID, prq.Name, ansiReset)
 							return prSummary(be, pr, sesh, prID)
 						},
 					},
@@ -807,7 +877,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							if err != nil {
 								return err
 							}
-							sesh.Printf("New title: %s (%d)\n", title, prq.ID)
+							sesh.Printf("%s✔ Updated PR #%d title to: %s%s\n\n", ansiGreen, prq.ID, title, ansiReset)
 
 							return err
 						},
@@ -852,11 +922,11 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							}
 
 							if len(patches) == 0 {
-								sesh.Println("Patches submitted! However none were saved, probably because they already exist in the system")
+								sesh.Printf("%sPatches submitted!%s However none were saved, probably because they already exist in the system.\n\n", ansiYellow, ansiReset)
 								return nil
 							}
 
-							sesh.Println("Patches submitted!")
+							sesh.Printf("%s✔ Submitted new patchset for PR #%d!%s\n\n", ansiGreen, prID, ansiReset)
 							return prSummary(be, pr, sesh, prID)
 						},
 					},
