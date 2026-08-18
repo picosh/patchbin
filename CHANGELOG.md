@@ -2,6 +2,16 @@
 
 Use spec: https://common-changelog.org/
 
+## v2026-08-18
+
+### Added
+
+- Zig semantic summary
+
+### Changed
+
+- Better syntax highlighting for line-diffs
+
 ## v2026-08-09
 
 ### Added
