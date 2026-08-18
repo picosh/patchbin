@@ -202,13 +202,14 @@ func getPatchData(web *WebCtx, patch *Patch) (*PatchData, error) {
 			adds += frag.LinesAdded
 			dels += frag.LinesDeleted
 
-			diffStr, err := parseText(web.Formatter, web.Theme, frag.String())
+			anchor := hunkAnchor(patch.ID, fileName, hunkIdx)
+			diffStr, err := FormatDiffHunk(web.Theme, fileName, frag, anchor)
 			if err != nil {
 				return nil, err
 			}
 
 			hunks = append(hunks, PatchHunk{
-				Anchor:   hunkAnchor(patch.ID, fileName, hunkIdx),
+				Anchor:   anchor,
 				DiffText: template.HTML(diffStr),
 			})
 		}

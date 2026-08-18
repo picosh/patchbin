@@ -382,10 +382,106 @@ summary {
   font-weight: normal !important;
 }
 
-.chroma table {
+.diff-container {
   width: 100%;
-  table-layout: fixed;
-  word-wrap: break-word;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: var(--grid-height) 0;
+}
+
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 0.88em;
+  line-height: var(--line-height);
+  tab-size: 4;
+  margin: 0;
+}
+
+.diff-line {
+  vertical-align: top;
+}
+
+.diff-num {
+  width: 1%;
+  min-width: 2.5rem;
+  padding: 0 0.5rem;
+  text-align: right;
+  color: var(--diff-num-text, var(--grey-light));
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: 0.85em;
+  white-space: nowrap;
+  scroll-margin-top: 4rem;
+}
+
+.diff-num a {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.diff-num a:hover {
+  color: var(--link-color);
+  text-decoration: underline;
+}
+
+.diff-num-old {
+  border-right: 1px solid transparent;
+}
+
+.diff-num-new {
+  border-right: 1px solid var(--border);
+}
+
+.diff-line:has(.diff-num:target),
+.diff-line:target {
+  background-color: rgba(189, 147, 249, 0.2) !important;
+  outline: 1px solid var(--visited);
+}
+
+.diff-gutter {
+  width: 1%;
+  min-width: 1.2rem;
+  padding: 0 0.25rem;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+  font-weight: bold;
+}
+
+.diff-code {
+  padding: 0 0.5rem;
+  white-space: pre;
+  font-family: inherit;
+  width: 100%;
+}
+
+.diff-line-add {
+  background-color: var(--diff-add-bg, rgba(102, 248, 89, 0.12));
+}
+
+.diff-line-add .diff-gutter {
+  color: var(--diff-add-gutter, var(--success));
+}
+
+.diff-line-delete {
+  background-color: var(--diff-del-bg, rgba(243, 139, 168, 0.12));
+}
+
+.diff-line-delete .diff-gutter {
+  color: var(--diff-del-gutter, var(--admin));
+}
+
+.diff-line-hunk {
+  background-color: var(--diff-hunk-bg, rgba(139, 233, 253, 0.08));
+}
+
+.diff-line-hunk .diff-code,
+.diff-line-hunk .diff-num {
+  color: var(--diff-hunk-text, var(--link-color));
 }
 
 .interdiff summary {

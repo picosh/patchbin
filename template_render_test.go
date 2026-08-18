@@ -59,8 +59,8 @@ func TestPatchFileTemplateRendersLineDiffOnly(t *testing.T) {
 	if bytes.Contains(buf.Bytes(), []byte("semantic-diff")) {
 		t.Errorf("expected no semantic-diff content inside patch-file, semantic breakdown belongs in the summary only")
 	}
-	if bytes.Contains(buf.Bytes(), []byte("Show line diff")) {
-		t.Errorf("expected no nested line-diff details, file details should be a flat line-diff")
+	if !bytes.Contains(buf.Bytes(), []byte(`<details class="details-min" open id="patch-1-foo.go">`)) {
+		t.Errorf("expected patch-file details element to be open by default")
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("patch-1-foo.go-hunk-0")) {
 		t.Errorf("expected hunk anchor in rendered line diff")

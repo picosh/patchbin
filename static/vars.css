@@ -17,4 +17,11 @@
   --shadow: #252525;
   --admin: #f38ba8;
   --success: #66f859;
+  --diff-add-bg: rgba(102, 248, 89, 0.12);
+  --diff-add-gutter: var(--success);
+  --diff-del-bg: rgba(243, 139, 168, 0.12);
+  --diff-del-gutter: var(--admin);
+  --diff-hunk-bg: rgba(139, 233, 253, 0.08);
+  --diff-hunk-text: var(--link-color);
+  --diff-num-text: var(--grey-light);
 }

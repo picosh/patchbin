@@ -1,7 +1,6 @@
 package patchbin
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/alecthomas/chroma/v2"
 	formatterHtml "github.com/alecthomas/chroma/v2/formatters/html"
-	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/gorilla/feeds"
 )
@@ -92,21 +90,6 @@ func getWebCtx(r *http.Request) (*WebCtx, error) {
 
 func setWebCtx(ctx context.Context, web *WebCtx) context.Context {
 	return context.WithValue(ctx, ctxWeb{}, web)
-}
-
-// converts contents of files in git tree to pretty formatted code.
-func parseText(formatter *formatterHtml.Formatter, theme *chroma.Style, text string) (string, error) {
-	lexer := lexers.Get("diff")
-	iterator, err := lexer.Tokenise(nil, text)
-	if err != nil {
-		return text, err
-	}
-	var buf bytes.Buffer
-	err = formatter.Format(&buf, theme, iterator)
-	if err != nil {
-		return text, err
-	}
-	return buf.String(), nil
 }
 
 func ctxMdw(ctx context.Context, handler http.HandlerFunc) http.HandlerFunc {
