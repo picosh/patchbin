@@ -16,6 +16,7 @@ require (
 	github.com/oddg/hungarian-algorithm v0.0.0-20170809162819-9567cbc363de
 	github.com/picosh/pico v1.13.2-0.20260226141633-740c00adfc93
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
+	github.com/tree-sitter-grammars/tree-sitter-zig v1.1.2
 	github.com/urfave/cli/v2 v2.27.2
 	golang.org/x/crypto v0.47.0
 	modernc.org/sqlite v1.44.3

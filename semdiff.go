@@ -18,6 +18,7 @@ import (
 	"github.com/smacker/go-tree-sitter/rust"
 	"github.com/smacker/go-tree-sitter/typescript/tsx"
 	"github.com/smacker/go-tree-sitter/typescript/typescript"
+	tree_sitter_zig "github.com/tree-sitter-grammars/tree-sitter-zig/bindings/go"
 )
 
 // SemanticChangeKind describes how an entity changed between the old and
@@ -141,6 +142,11 @@ var languageRegistry = map[string]languageSpec{
 `,
 		enclosingNameFromComment: rustEnclosingNameFromComment,
 	},
+	".zig": {
+		language:                 sitter.NewLanguage(tree_sitter_zig.Language()),
+		query:                    zigQuery,
+		enclosingNameFromComment: zigEnclosingNameFromComment,
+	},
 }
 
 // jsFamilyQuery covers the declaration shapes shared by JavaScript and
@@ -176,6 +182,27 @@ const tsQuery = `
 
 (type_alias_declaration
   name: (type_identifier) @name) @entity
+`
+
+const zigQuery = `
+(function_declaration
+  name: (identifier) @name) @entity
+
+(test_declaration
+  [
+    (string)
+    (identifier)
+  ] @name) @entity
+
+(variable_declaration
+  (identifier) @name
+  [
+    (struct_declaration)
+    (enum_declaration)
+    (union_declaration)
+    (opaque_declaration)
+    (error_set_declaration)
+  ]) @entity
 `
 
 var goFuncCommentPattern = regexp.MustCompile(`^func\s*(?:\([^)]*\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
@@ -245,6 +272,28 @@ func rustEnclosingNameFromComment(comment string) (kind, name string, ok bool) {
 	}
 	if m := rustTraitCommentPattern.FindStringSubmatch(comment); m != nil {
 		return "trait_item", m[1], true
+	}
+	return "", "", false
+}
+
+var (
+	zigFunctionCommentPattern  = regexp.MustCompile(`^\s*(?:pub\s+|export\s+|extern(?:\s+"[^"]*")?\s+|inline\s+|noinline\s+)*fn\s+([A-Za-z_][A-Za-z0-9_]*|@"[^"]+")`)
+	zigTestCommentPattern      = regexp.MustCompile(`^\s*(?:pub\s+)?test\s+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*|@"[^"]+"))`)
+	zigContainerCommentPattern = regexp.MustCompile(`^\s*(?:pub\s+|export\s+|extern(?:\s+"[^"]*")?\s+|threadlocal\s+)*(?:const|var)\s+([A-Za-z_][A-Za-z0-9_]*|@"[^"]+")\s*(?::\s*[^=]+)?\s*=\s*(?:extern\s+|packed\s+)?(?:struct|enum|union|opaque|error)`)
+)
+
+func zigEnclosingNameFromComment(comment string) (kind, name string, ok bool) {
+	if m := zigFunctionCommentPattern.FindStringSubmatch(comment); m != nil {
+		return "function_declaration", m[1], true
+	}
+	if m := zigTestCommentPattern.FindStringSubmatch(comment); m != nil {
+		if m[1] != "" {
+			return "test_declaration", m[1], true
+		}
+		return "test_declaration", m[2], true
+	}
+	if m := zigContainerCommentPattern.FindStringSubmatch(comment); m != nil {
+		return "variable_declaration", m[1], true
 	}
 	return "", "", false
 }
