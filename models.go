@@ -10,13 +10,6 @@ import (
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
-type Status string
-
-const (
-	StatusDraft Status = "draft"
-	StatusOpen  Status = "open"
-)
-
 // User is a db model for users.
 type User struct {
 	ID        int64     `db:"id"`
@@ -42,7 +35,6 @@ type PatchRequest struct {
 	RepoName     string    `db:"repo_name"` // Plain string namespace
 	Name         string    `db:"name"`
 	Text         string    `db:"text"`
-	Status       Status    `db:"status"`
 	CreatedAt    time.Time `db:"created_at"`
 	UpdatedAt    time.Time `db:"updated_at"`
 	LastActivity time.Time `db:"last_activity"`
@@ -93,7 +85,6 @@ type EventLog struct {
 
 type EventData struct {
 	Name    string `json:"name,omitempty"`
-	Status  Status `json:"status,omitempty"`
 	Comment string `json:"comment,omitempty"`
 }
 

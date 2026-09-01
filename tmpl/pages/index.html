@@ -49,12 +49,9 @@
         <h2>Quickstart</h2>
 
         <div>
-          Submit a patch request (starts as a draft, visible only to you):
+          Submit a patch request:
         </div>
         <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
-
-        <div>Open it so others can see it (also enables RSS notifications):</div>
-        <pre class="m-0">ssh {{.MetaData.URL}} pr open {prID}</pre>
 
         <div>Checkout the latest patchset from a patch request:</div>
         <pre class="m-0">ssh {{.MetaData.URL}} print {prID} | git am -3</pre>
@@ -73,20 +70,12 @@
           <summary class="font-bold">pr - manage patch requests</summary>
           <div class="group my">
             <div>
-              <code>pr create {repo} [--open]</code> - submit a new PR from stdin (starts as draft by default, or open with --open)
-              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo} --open</pre>
+              <code>pr create {repo}</code> - submit a new PR from stdin
+              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
             </div>
             <div>
               <code>pr add {prID}</code> - add a new patchset to an existing PR from stdin
               <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
-            </div>
-            <div>
-              <code>pr open {prID} [--comment]</code> - transition draft &rarr; open, enables RSS notifications
-              <pre class="m-0">ssh {{.MetaData.URL}} pr open {prID}</pre>
-            </div>
-            <div>
-              <code>pr draft {prID} [--comment]</code> - transition open &rarr; draft, disables RSS notifications
-              <pre class="m-0">ssh {{.MetaData.URL}} pr draft {prID}</pre>
             </div>
             <div>
               <code>pr edit {prID} {title}</code> - rename a PR
@@ -97,8 +86,8 @@
               <pre class="m-0">ssh {{.MetaData.URL}} pr summary {prID}</pre>
             </div>
             <div>
-              <code>pr ls [repo] [--draft|--open|--active|--inactive|--mine]</code> - list PRs
-              <pre class="m-0">ssh {{.MetaData.URL}} pr ls {repo} --open</pre>
+              <code>pr ls [repo] [--active|--inactive|--mine]</code> - list PRs
+              <pre class="m-0">ssh {{.MetaData.URL}} pr ls {repo}</pre>
             </div>
           </div>
         </details>
@@ -107,7 +96,7 @@
           <summary class="font-bold">issue - text-only patch requests (no code required)</summary>
           <div class="group my">
             <div>
-              <code>issue create {repo} [--title]</code> - submit a new issue from stdin (starts as open)
+              <code>issue create {repo} [--title]</code> - submit a new issue from stdin
               <pre class="m-0">echo "steps to reproduce..." | ssh {{.MetaData.URL}} issue create {repo} --title "bug: crash on startup"</pre>
             </div>
           </div>

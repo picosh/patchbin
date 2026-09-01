@@ -3,7 +3,6 @@
   <thead>
     <tr>
       <th class="text-left">Repo</th>
-      <th class="text-left">Status</th>
       <th class="text-left">User</th>
       <th class="text-left">Title</th>
       <th class="text-left">Patchsets</th>
@@ -17,7 +16,6 @@
         <td>
           <a href="{{.RepoLink.Url}}">{{.RepoLink.Text}}</a>
         </td>
-        <td>{{template "pr-status" .Status}}</td>
         <td>{{template "user-pill" .UserData}}</td>
         <td>
           <code>#{{.ID}}</code>
@@ -28,7 +26,7 @@
       </tr>
     {{else}}
       <tr>
-        <td colspan="6">No patch requests found.</td>
+        <td colspan="5">No patch requests found.</td>
       </tr>
     {{end}}
   </tbody>

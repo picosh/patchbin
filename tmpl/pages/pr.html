@@ -20,13 +20,6 @@
 
       <div class="flex items-center gap border-visited flex-wrap">
         <a href="/prs/{{.Pr.ID}}">{{.Pr.Title}}</a>
-        {{if eq .Pr.Status "draft"}}
-          <code class="pill-info">{{.Pr.Status}}</code>
-        {{else if eq .Pr.Status "open"}}
-          <code class="pill-success">{{.Pr.Status}}</code>
-        {{else}}
-          <code>{{.Pr.Status}}</code>
-        {{end}}
         <a class="btn-nav flex items-center" href="/prs/{{.Pr.ID}}/rss" style="padding: 0.025rem 0.3rem;">
           rss
         </a>
@@ -34,7 +27,7 @@
 
       <div class="group timeline text-sm my">
         {{range .Logs}}
-        <div class="timeline-item{{if eq .Event "pr_status_changed"}} timeline-status-{{.Data.Status}}{{end}}">
+        <div class="timeline-item">
           {{if eq .Event "pr_patchset_added"}}
             <details class="mb" style="border: 0; padding: 0;">
               <summary>
@@ -52,18 +45,6 @@
                 {{- end -}}
               </div>
             </details>
-
-          {{else if eq .Event "pr_status_changed"}}
-            <div>
-              <span class="font-bold">changed status to
-                <code class="pill-status-{{.Data.Status}}">{{.Data.Status}}</code>
-              </span>
-              <span class="event-meta">on <date>{{.Date}}</date> &middot; by {{template "user-pill" .UserData}}</span>
-            </div>
-
-            {{if .Data.Comment}}
-            <div class="status-change-comment">{{.Data.Comment}}</div>
-            {{end}}
 
           {{else}}
             <div>
@@ -98,12 +79,6 @@
 
           add changes to patch request:
           <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} pr add {{.Pr.ID}}</pre>
-
-          set PR to open (enables RSS notifications):
-          <pre class="m-0">ssh {{.MetaData.URL}} pr open {{.Pr.ID}}</pre>
-
-          set PR to draft (stops RSS notifications):
-          <pre class="m-0">ssh {{.MetaData.URL}} pr draft {{.Pr.ID}}</pre>
         </div>
       </details>
     </div>

@@ -13,7 +13,6 @@ func buildTestPR(id int64, name string) *PatchRequest {
 		ID:        id,
 		Name:      name,
 		RepoName:  "test-repo",
-		Status:    StatusOpen,
 		CreatedAt: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
 }

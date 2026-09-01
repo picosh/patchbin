@@ -2,6 +2,12 @@
 
 Use spec: https://common-changelog.org/
 
+## v2026-08-31
+
+### Changed
+
+- Removed the concept of a `draft` patch request
+
 ## v2026-08-18
 
 ### Added

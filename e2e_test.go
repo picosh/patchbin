@@ -70,19 +70,14 @@ func testMultiTenantE2E(t *testing.T) {
 	t.Log("User edits PR title (only creator can edit)")
 	suite.userKey.MustCmd(nil, "pr edit "+userPRID+" Updated title")
 
-	t.Log("User changes PR status to open (only creator can change status)")
-	suite.userKey.MustCmd(nil, "pr open "+userPRID)
-
 	t.Log("Admin creates PR")
 	suite.adminKey.MustCmd(suite.patch, "pr create admin-repo")
 
 	t.Log("Admin adds patchset to user's PR (zero-trust: anyone can add)")
 	suite.adminKey.MustCmd(suite.otherPatch, "pr add "+userPRID)
 
-	t.Log("User creates another PR and sets to open")
-	output2 := suite.userKey.MustCmd(suite.patch, "pr create draft-repo")
-	draftPRID := util.ParsePRID(output2)
-	suite.userKey.MustCmd(nil, "pr open "+draftPRID)
+	t.Log("User creates another PR")
+	suite.userKey.MustCmd(suite.patch, "pr create other-repo")
 
 	t.Log("List PRs")
 	suite.userKey.MustCmd(nil, "pr ls")

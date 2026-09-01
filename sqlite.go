@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS patch_requests (
   repo_name TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   text TEXT NOT NULL,
-  status TEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL,
   last_activity DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -264,6 +263,28 @@ var sqliteMigrations = []string{
 	DELETE FROM patches WHERE patchset_id IN (SELECT id FROM patchsets WHERE patch_request_id IN (SELECT id FROM patch_requests WHERE trim(name) = ''));
 	DELETE FROM patchsets WHERE patch_request_id IN (SELECT id FROM patch_requests WHERE trim(name) = '');
 	DELETE FROM patch_requests WHERE trim(name) = '';`,
+	// Phase 3: Remove status column from patch_requests and clean up status changed logs
+	`CREATE TABLE tmp_patch_requests_v3 (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		repo_name TEXT NOT NULL DEFAULT '',
+		name TEXT NOT NULL,
+		text TEXT NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL,
+		last_activity DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		CONSTRAINT pr_user_id_fk
+			FOREIGN KEY(user_id) REFERENCES app_users(id)
+			ON DELETE CASCADE
+			ON UPDATE CASCADE
+	);
+	INSERT INTO tmp_patch_requests_v3 (id, user_id, repo_name, name, text, created_at, updated_at, last_activity)
+		SELECT id, user_id, repo_name, name, text, created_at, updated_at, last_activity
+		FROM patch_requests;
+	DROP TABLE patch_requests;
+	ALTER TABLE tmp_patch_requests_v3 RENAME TO patch_requests;
+	CREATE INDEX IF NOT EXISTS idx_patch_requests_last_activity ON patch_requests(last_activity);
+	DELETE FROM event_logs WHERE event = 'pr_status_changed';`,
 }
 
 // Open opens a database connection.

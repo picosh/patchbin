@@ -45,7 +45,6 @@ type PrListItem struct {
 	ID            int64
 	Name          string
 	RepoName      string
-	Status        Status
 	FormattedDate string
 	NumPatchsets  int
 }
@@ -120,7 +119,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 type TabStatus string
 
 const (
-	TabStatusDraft    TabStatus = "draft"
 	TabStatusActive   TabStatus = "active"
 	TabStatusInactive TabStatus = "inactive"
 )
@@ -135,8 +133,6 @@ func createPrListHandler(tab TabStatus) http.HandlerFunc {
 
 		var prs []*PatchRequest
 		switch TabStatus(tab) {
-		case TabStatusDraft:
-			prs, err = web.Pr.GetPatchRequestsByStatus(StatusDraft)
 		case TabStatusInactive:
 			prs, err = web.Pr.GetPatchRequestsInactive()
 		case TabStatusActive:
@@ -160,7 +156,6 @@ func createPrListHandler(tab TabStatus) http.HandlerFunc {
 				ID:            pr.ID,
 				Name:          pr.Name,
 				RepoName:      pr.RepoName,
-				Status:        pr.Status,
 				FormattedDate: pr.CreatedAt.Format(web.Backend.Cfg.TimeFormat),
 				NumPatchsets:  len(patchsets),
 			})
@@ -246,11 +241,6 @@ func rssHandler(w http.ResponseWriter, r *http.Request) {
 
 		pr, err := web.Pr.GetPatchRequestByID(eventLog.PatchRequestID.Int64)
 		if err != nil {
-			continue
-		}
-
-		// Don't send RSS notifications for draft PRs
-		if pr.Status == StatusDraft {
 			continue
 		}
 
@@ -413,7 +403,6 @@ func GitWebServer(cfg *GitCfg) http.Handler {
 	// GODEBUG=httpmuxgo121=0
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /prs/active", ctxMdw(ctx, createPrListHandler("active")))
-	mux.HandleFunc("GET /prs/draft", ctxMdw(ctx, createPrListHandler("draft")))
 	mux.HandleFunc("GET /prs/inactive", ctxMdw(ctx, createPrListHandler("inactive")))
 	mux.HandleFunc("GET /prs/{id}", ctxMdw(ctx, createPrDetail))
 	mux.HandleFunc("GET /prs/{id}/patches/{patchID}", ctxMdw(ctx, createPrDetail))

@@ -10,16 +10,10 @@ There's no accept or reject step. A patch request is simply active or inactive: 
 
 ## quickstart
 
-Submit a patch request (starts as a draft, visible only to you):
+Submit a patch request:
 
 ```
 git format-patch main --stdout | ssh {url} pr create {repo}
-```
-
-Open it so others can see it (also enables RSS notifications):
-
-```
-ssh {url} pr open {prID}
 ```
 
 Checkout the latest patchset from a patch request:
@@ -44,21 +38,13 @@ ssh {url} help
 
 ### pr - manage patch requests
 
-- `pr create {repo}` - submit a new PR from stdin (starts as draft)
+- `pr create {repo}` - submit a new PR from stdin
   ```
   git format-patch main --stdout | ssh {url} pr create {repo}
   ```
 - `pr add {prID}` - add a new patchset to an existing PR from stdin
   ```
   git format-patch main --stdout | ssh {url} pr add {prID}
-  ```
-- `pr open {prID} [--comment]` - transition draft open, enables RSS notifications
-  ```
-  ssh {url} pr open {prID}
-  ```
-- `pr draft {prID} [--comment]` - transition open draft, disables RSS notifications
-  ```
-  ssh {url} pr draft {prID}
   ```
 - `pr edit {prID} {title}` - rename a PR
   ```
@@ -68,14 +54,14 @@ ssh {url} help
   ```
   ssh {url} pr summary {prID}
   ```
-- `pr ls [repo] [--draft|--open|--active|--inactive|--mine]` - list PRs
+- `pr ls [repo] [--active|--inactive|--mine]` - list PRs
   ```
-  ssh {url} pr ls {repo} --open
+  ssh {url} pr ls {repo}
   ```
 
 ### issue - text-only patch requests
 
-- `issue create {repo} [--title]` - submit a new issue from stdin (starts as open)
+- `issue create {repo} [--title]` - submit a new issue from stdin
   ```
   echo "steps to reproduce..." | ssh {url} issue create {repo} --title "bug: crash on startup"
   ```

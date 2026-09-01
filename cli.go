@@ -22,17 +22,6 @@ const (
 	ansiGray   = "\033[90m"
 )
 
-func formatStatus(status Status) string {
-	switch status {
-	case StatusDraft:
-		return fmt.Sprintf("%s[draft]%s", ansiYellow, ansiReset)
-	case StatusOpen:
-		return fmt.Sprintf("%s[open]%s", ansiGreen, ansiReset)
-	default:
-		return fmt.Sprintf("[%s]", status)
-	}
-}
-
 func formatTable(sesh io.Writer, render func(w io.Writer)) {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
@@ -47,8 +36,6 @@ func formatTable(sesh io.Writer, render func(w io.Writer)) {
 		if i == 0 {
 			_, _ = fmt.Fprintf(sesh, "%s%s%s\n", ansiGray, line, ansiReset)
 		} else {
-			line = strings.ReplaceAll(line, "[draft]", fmt.Sprintf("%s[draft]%s", ansiYellow, ansiReset))
-			line = strings.ReplaceAll(line, "[open]", fmt.Sprintf("%s[open]%s", ansiGreen, ansiReset))
 			_, _ = fmt.Fprintln(sesh, line)
 		}
 	}
@@ -103,14 +90,10 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 		return err
 	}
 
-	statusBadge := formatStatus(request.Status)
-	sesh.Printf("%s● PR #%d%s  %s%s%s  %s\n", ansiBold, request.ID, ansiReset, ansiBold, request.Name, ansiReset, statusBadge)
+	sesh.Printf("%s● PR #%d%s  %s%s%s\n", ansiBold, request.ID, ansiReset, ansiBold, request.Name, ansiReset)
 	sesh.Printf("  %sRepo:%s   %s\n", ansiGray, ansiReset, request.RepoName)
 	sesh.Printf("  %sURL:%s    https://%s/prs/%d\n", ansiGray, ansiReset, be.Cfg.Url, prID)
 	sesh.Printf("  %sDate:%s   %s\n", ansiGray, ansiReset, request.CreatedAt.Format(be.Cfg.TimeFormat))
-	if request.Status == StatusDraft {
-		sesh.Printf("  %sHint:%s   PR is draft! Run `pr open %d` to make it visible.\n", ansiCyan, ansiReset, prID)
-	}
 	sesh.Printf("\n")
 
 	patchsets, err := pr.GetPatchsetsByPrID(prID)
@@ -223,30 +206,22 @@ on top of each other. Reviewing means pulling the code down, not clicking
 through a diff viewer. An issue is just a patch request without any code
 attached yet, so anyone can follow up with a real patch request on top of it.
 
-There's no accept/reject step. A PR is either draft (visible only to you)
-or open (visible to everyone, appears in RSS). It goes inactive after 30
-days without activity; a reviewer who's happy just pulls it, merges it, and
-pushes upstream themselves.
+There's no accept/reject step. A patch request is simply active
+or inactive: active ones go inactive after 30 days without activity.
+When a reviewer is happy with the code, they pull it, merge it, and
+push upstream themselves; there's nothing to manage here beyond that.
 
 COMMANDS
 
 pr - manage patch requests
 
-  pr create {repo} [--open]
-    Submit a new PR from stdin (starts as draft by default, or open with --open).
-    git format-patch main --stdout | ssh %[2]s pr create {repo} --open
+  pr create {repo}
+    Submit a new PR from stdin.
+    git format-patch main --stdout | ssh %[2]s pr create {repo}
 
   pr add {prID}
     Add a new patchset to an existing PR from stdin.
     git format-patch main --stdout | ssh %[2]s pr add {prID}
-
-  pr open {prID} [--comment]
-    Transition draft -> open, enables RSS notifications.
-    ssh %[2]s pr open {prID}
-
-  pr draft {prID} [--comment]
-    Transition open -> draft, disables RSS notifications.
-    ssh %[2]s pr draft {prID}
 
   pr edit {prID} {title}
     Rename a PR.
@@ -256,14 +231,14 @@ pr - manage patch requests
     Show metadata, patchsets, and patches for a PR.
     ssh %[2]s pr summary {prID}
 
-  pr ls [repo] [--draft|--open|--active|--inactive|--mine]
+  pr ls [repo] [--active|--inactive|--mine]
     List PRs.
-    ssh %[2]s pr ls {repo} --open
+    ssh %[2]s pr ls {repo}
 
 issue - text-only patch requests (no code required)
 
   issue create {repo} [--title]
-    Submit a new issue from stdin (starts as open).
+    Submit a new issue from stdin.
     echo "steps to reproduce..." | ssh %[2]s issue create {repo} --title "bug: crash on startup"
 
 ps - manage patchsets
@@ -294,9 +269,8 @@ logs - event history
 
 STDIN
 
-  pr create, pr add        expect the output of "git format-patch --stdout"
-  issue create              expects free-form text (the issue body)
-  pr open/draft --comment  expects free-form text (a comment to attach to the status change)
+  pr create, pr add  expect the output of "git format-patch --stdout"
+  issue create        expects free-form text (the issue body)
 
 GUARDS
 
@@ -552,14 +526,6 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 						ArgsUsage: "[repoName]",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
-								Name:  "draft",
-								Usage: "only show draft PRs",
-							},
-							&cli.BoolFlag{
-								Name:  "open",
-								Usage: "only show open PRs",
-							},
-							&cli.BoolFlag{
 								Name:  "active",
 								Usage: "only show active PRs (activity in last 30 days)",
 							},
@@ -589,8 +555,6 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 								}
 							}
 
-							onlyDraft := cCtx.Bool("draft")
-							onlyOpen := cCtx.Bool("open")
 							onlyActive := cCtx.Bool("active")
 							onlyInactive := cCtx.Bool("inactive")
 							onlyMine := cCtx.Bool("mine")
@@ -604,14 +568,6 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 
 							var matching []*PatchRequest
 							for _, req := range prs {
-								if onlyDraft && req.Status != StatusDraft {
-									continue
-								}
-
-								if onlyOpen && req.Status != StatusOpen {
-									continue
-								}
-
 								if onlyActive && req.LastActivity.Before(cutoff) {
 									continue
 								}
@@ -639,7 +595,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							}
 
 							formatTable(sesh, func(w io.Writer) {
-								_, _ = fmt.Fprintln(w, "  ID\tRepo\tStatus\tPatchsets\tUser\tLast Activity\tTitle")
+								_, _ = fmt.Fprintln(w, "  ID\tRepo\tPatchsets\tUser\tLast Activity\tTitle")
 								for _, req := range matching {
 									user, _ := pr.GetUserByID(req.UserID)
 									patchsets, err := pr.GetPatchsetsByPrID(req.ID)
@@ -652,10 +608,9 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 
 									_, _ = fmt.Fprintf(
 										w,
-										"  %d\t%s\t[%s]\t%d\t%s\t%s\t%s\n",
+										"  %d\t%s\t%d\t%s\t%s\t%s\n",
 										req.ID,
 										req.RepoName,
-										req.Status,
 										len(patchsets),
 										displayName,
 										req.LastActivity.Format(be.Cfg.TimeFormat),
@@ -668,19 +623,9 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 					},
 					{
 						Name:      "create",
-						Usage:     "Submit a new PR (starts as draft by default)",
+						Usage:     "Submit a new PR",
 						Args:      true,
 						ArgsUsage: "repoName",
-						Flags: []cli.Flag{
-							&cli.BoolFlag{
-								Name:  "open",
-								Usage: "create PR directly in open status (enables RSS notifications)",
-							},
-							&cli.BoolFlag{
-								Name:  "draft",
-								Usage: "create PR in draft status (default)",
-							},
-						},
 						Action: func(cCtx *cli.Context) error {
 							if !be.Limiter.Allow() {
 								return be.Limiter.Error()
@@ -702,113 +647,12 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 								return fmt.Errorf("failed to read patchset from stdin: %w", err)
 							}
 
-							status := StatusDraft
-							if cCtx.Bool("open") {
-								status = StatusOpen
-							}
-
-							prq, err := pr.SubmitPatchRequest(user.ID, pubkey, repoName, status, bytes.NewReader(body))
+							prq, err := pr.SubmitPatchRequest(user.ID, pubkey, repoName, bytes.NewReader(body))
 							if err != nil {
 								return err
 							}
 
 							return prSummary(be, pr, sesh, prq.ID)
-						},
-					},
-					{
-						Name:      "open",
-						Usage:     "Transition PR to open (enable RSS notifications)",
-						Args:      true,
-						ArgsUsage: "[prID]",
-						Flags: []cli.Flag{
-							&cli.BoolFlag{
-								Name:  "comment",
-								Usage: "If this flag is provided, pass comment through stdin",
-							},
-						},
-						Action: func(cCtx *cli.Context) error {
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patch request ID")
-							}
-
-							prID, err := strToInt(args.First())
-							if err != nil {
-								return err
-							}
-
-							prq, err := pr.GetPatchRequestByID(prID)
-							if err != nil {
-								return err
-							}
-
-							if prq.Status == StatusOpen {
-								return fmt.Errorf("PR is already open")
-							}
-
-							comment := cCtx.Bool("comment")
-							var commentTxt []byte
-							if comment {
-								commentTxt, err = io.ReadAll(sesh)
-								if err != nil {
-									return fmt.Errorf("when comment flag enabled must provide it from stdin")
-								}
-							}
-
-							err = pr.UpdatePatchRequestStatus(prID, pubkey, StatusOpen, string(commentTxt))
-							if err != nil {
-								return err
-							}
-							sesh.Printf("%s✔ Opened PR #%d (%s)%s\n\n", ansiGreen, prq.ID, prq.Name, ansiReset)
-							return prSummary(be, pr, sesh, prID)
-						},
-					},
-					{
-						Name:      "draft",
-						Usage:     "Transition PR to draft (disable RSS notifications)",
-						Args:      true,
-						ArgsUsage: "[prID]",
-						Flags: []cli.Flag{
-							&cli.BoolFlag{
-								Name:  "comment",
-								Usage: "If this flag is provided, pass comment through stdin",
-							},
-						},
-						Action: func(cCtx *cli.Context) error {
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patch request ID")
-							}
-
-							prID, err := strToInt(args.First())
-							if err != nil {
-								return err
-							}
-
-							prq, err := pr.GetPatchRequestByID(prID)
-							if err != nil {
-								return err
-							}
-
-							if prq.Status == StatusDraft {
-								return fmt.Errorf("PR is already a draft")
-							}
-
-							comment := cCtx.Bool("comment")
-							var commentTxt []byte
-							if comment {
-								commentTxt, err = io.ReadAll(sesh)
-								if err != nil {
-									return fmt.Errorf("when comment flag enabled must provide it from stdin")
-								}
-							}
-
-							err = pr.UpdatePatchRequestStatus(prID, pubkey, StatusDraft, string(commentTxt))
-							if err != nil {
-								return err
-							}
-							sesh.Printf("%s✔ Set PR #%d (%s) to draft.%s\n\n", ansiGreen, prq.ID, prq.Name, ansiReset)
-							return prSummary(be, pr, sesh, prID)
 						},
 					},
 					{

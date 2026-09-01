@@ -158,10 +158,10 @@ func GenerateKeys() (UserSSH, UserSSH) {
 	}
 
 	return UserSSH{
-			username: "admin",
-			signer:   adminSigner,
-		}, UserSSH{
-			username: "contributor",
-			signer:   userSigner,
-		}
+		username: "admin",
+		signer:   adminSigner,
+	}, UserSSH{
+		username: "contributor",
+		signer:   userSigner,
+	}
 }

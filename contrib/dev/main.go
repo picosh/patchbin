@@ -72,38 +72,19 @@ func main() {
 		panic(err)
 	}
 
-	// Opened patch (creator opens their own PR)
+	// PR with title edited
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 1 Opened patch")
-	userKey.MustCmd(nil, `pr open --comment "ready for review" 1`)
+	userKey.MustCmd(nil, "pr edit 1 Simple PR")
 
-	// Drafted patch (creator sets back to draft)
+	// PR with patchset added by another user
 	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 2 Drafted patch")
-	userKey.MustCmd(nil, `pr draft --comment "need more work" 2`)
+	userKey.MustCmd(nil, "pr edit 2 Collaborative PR")
+	adminKey.MustCmd(otherPatch, `pr add 2`)
 
-	// Opened then re-drafted by creator
-	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 3 Opened then re-drafted")
-	userKey.MustCmd(nil, `pr open 3`)
-	userKey.MustCmd(nil, `pr draft --comment "Woops, didn't mean to submit yet" 3`)
-
-	// Patchset added by another user, creator opens
-	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 5 Patchset from another user")
-	adminKey.MustCmd(otherPatch, `pr add 5`)
-	userKey.MustCmd(nil, `pr open --comment "updated with feedback" 5`)
-
-	// Patchset added by another user, creator drafts
-	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 6 Patchset then drafted")
-	adminKey.MustCmd(otherPatch, `pr add 6`)
-	userKey.MustCmd(nil, `pr draft --comment "taking a step back on this" 6`)
-
-	// Range Diff
+	// Range Diff PR
 	userKey.MustCmd(rd1, "pr create test")
-	userKey.MustCmd(nil, "pr edit 7 Range Diff")
-	userKey.MustCmd(rd2, "pr add 7")
+	userKey.MustCmd(nil, "pr edit 3 Range Diff")
+	userKey.MustCmd(rd2, "pr add 3")
 
 	fmt.Println("time to do some testing...")
 	ch := make(chan os.Signal, 1)

@@ -29,10 +29,9 @@ type PatchsetData struct {
 
 type PrData struct {
 	UserData
-	ID     int64
-	Title  string
-	Date   string
-	Status Status
+	ID    int64
+	Title string
+	Date  string
 }
 
 type EventLogData struct {
@@ -426,9 +425,8 @@ func createPrDetail(w http.ResponseWriter, r *http.Request) {
 				Pubkey:    user.Pubkey,
 				CreatedAt: user.CreatedAt.Format(time.RFC3339),
 			},
-			Title:  pr.Name,
-			Date:   pr.CreatedAt.Format(web.Backend.Cfg.TimeFormat),
-			Status: pr.Status,
+			Title: pr.Name,
+			Date:  pr.CreatedAt.Format(web.Backend.Cfg.TimeFormat),
 		},
 		MetaData: MetaData{
 			URL: web.Backend.Cfg.Url,

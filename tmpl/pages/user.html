@@ -24,14 +24,6 @@
 </header>
 
 <main class="group">
-  <div>
-    filter
-    <a href="/r/{{.UserData.Name}}">open</a> <code>{{.NumOpen}}</code>
-    &middot;
-    <a href="/r/{{.UserData.Name}}?status=accepted">accepted</a> <code>{{.NumAccepted}}</code>
-    &middot;
-    <a href="/r/{{.UserData.Name}}?status=closed">closed</a> <code>{{.NumClosed}}</code>
-  </div>
   {{template "pr-table" .Prs}}
 </main>
 

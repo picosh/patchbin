@@ -26,7 +26,7 @@ type GitPatchRequest interface {
 	GetUserByPubkey(pubkey string) (*User, error)
 	UpsertUserByPubkey(pubkey string) (*User, error)
 	IsBanned(pubkey, ipAddress string) error
-	SubmitPatchRequest(userID int64, userPubkey string, repoName string, status Status, patchset io.Reader) (*PatchRequest, error)
+	SubmitPatchRequest(userID int64, userPubkey string, repoName string, patchset io.Reader) (*PatchRequest, error)
 	SubmitPatchset(prID, userID int64, op PatchsetOp, patchset io.Reader) ([]*Patch, error)
 	GetPatchRequestByID(prID int64) (*PatchRequest, error)
 	GetPatchRequests() ([]*PatchRequest, error)
@@ -36,7 +36,6 @@ type GitPatchRequest interface {
 	GetPatchsetByID(patchsetID int64) (*Patchset, error)
 	GetLatestPatchsetByPrID(prID int64) (*Patchset, error)
 	GetPatchesByPatchsetID(patchsetID int64) ([]*Patch, error)
-	UpdatePatchRequestStatus(prID int64, userPubkey string, status Status, comment string) error
 	UpdatePatchRequestName(prID int64, userPubkey string, name string) error
 	DeletePatchsetByID(userID, prID int64, patchsetID int64) error
 	SubmitIssue(userID int64, userPubkey string, repoName, title, body string) (*PatchRequest, error)
@@ -175,21 +174,11 @@ func (cmd PrCmd) GetPatchRequests() ([]*PatchRequest, error) {
 	return prs, err
 }
 
-func (cmd PrCmd) GetPatchRequestsByStatus(status Status) ([]*PatchRequest, error) {
-	prs := []*PatchRequest{}
-	err := cmd.Backend.DB.Select(
-		&prs,
-		"SELECT * FROM patch_requests WHERE status=? ORDER BY last_activity DESC",
-		status,
-	)
-	return prs, err
-}
-
 func (cmd PrCmd) GetPatchRequestsActive() ([]*PatchRequest, error) {
 	prs := []*PatchRequest{}
 	err := cmd.Backend.DB.Select(
 		&prs,
-		"SELECT * FROM patch_requests WHERE status='open' AND last_activity >= datetime('now', '-14 days') ORDER BY last_activity DESC",
+		"SELECT * FROM patch_requests WHERE last_activity >= datetime('now', '-30 days') ORDER BY last_activity DESC",
 	)
 	return prs, err
 }
@@ -198,7 +187,7 @@ func (cmd PrCmd) GetPatchRequestsInactive() ([]*PatchRequest, error) {
 	prs := []*PatchRequest{}
 	err := cmd.Backend.DB.Select(
 		&prs,
-		"SELECT * FROM patch_requests WHERE status='open' AND last_activity < datetime('now', '-14 days') ORDER BY last_activity DESC",
+		"SELECT * FROM patch_requests WHERE last_activity < datetime('now', '-30 days') ORDER BY last_activity DESC",
 	)
 	return prs, err
 }
@@ -240,60 +229,6 @@ func (cmd PrCmd) updateLastActivity(prID int64) error {
 		prID,
 	)
 	return err
-}
-
-// UpdatePatchRequestStatus changes the PR status. Only the PR creator (by pubkey) can do this.
-func (cmd PrCmd) UpdatePatchRequestStatus(prID int64, userPubkey string, status Status, comment string) error {
-	pr, err := cmd.GetPatchRequestByID(prID)
-	if err != nil {
-		return err
-	}
-
-	// Verify the requester is the PR creator
-	owner, err := cmd.GetUserByID(pr.UserID)
-	if err != nil {
-		return err
-	}
-	if owner.Pubkey != userPubkey {
-		return ErrNotPrOwner
-	}
-
-	tx, err := cmd.Backend.DB.Beginx()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	_, err = tx.Exec(
-		"UPDATE patch_requests SET status=? WHERE id=?",
-		status,
-		prID,
-	)
-	if err != nil {
-		return err
-	}
-
-	err = cmd.CreateEventLog(tx, EventLog{
-		UserID:         pr.UserID,
-		PatchRequestID: sql.NullInt64{Int64: prID, Valid: true},
-		Event:          "pr_status_changed",
-		Data: EventData{
-			Status:  status,
-			Comment: comment,
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return cmd.updateLastActivity(prID)
 }
 
 // UpdatePatchRequestName changes the PR title. Only the PR creator (by pubkey) can do this.
@@ -404,12 +339,8 @@ func (cmd PrCmd) createPatch(tx *sqlx.Tx, patch *Patch) (int64, error) {
 	return patchID, err
 }
 
-// SubmitPatchRequest creates a new patch request with the given status (draft or open).
-func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName string, status Status, patchset io.Reader) (*PatchRequest, error) {
-	if status == "" {
-		status = StatusDraft
-	}
-
+// SubmitPatchRequest creates a new patch request.
+func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName string, patchset io.Reader) (*PatchRequest, error) {
 	tx, err := cmd.Backend.DB.Beginx()
 	if err != nil {
 		return nil, err
@@ -438,12 +369,11 @@ func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName st
 	now := time.Now()
 	var prID int64
 	row := tx.QueryRow(
-		"INSERT INTO patch_requests (user_id, repo_name, name, text, status, updated_at, last_activity) VALUES(?, ?, ?, ?, ?, ?, ?) RETURNING id",
+		"INSERT INTO patch_requests (user_id, repo_name, name, text, updated_at, last_activity) VALUES(?, ?, ?, ?, ?, ?) RETURNING id",
 		userID,
 		repoName,
 		prName,
 		prText,
-		status,
 		now,
 		now,
 	)
@@ -498,7 +428,7 @@ func (cmd PrCmd) SubmitPatchRequest(userID int64, userPubkey string, repoName st
 	return &pr, err
 }
 
-// SubmitIssue creates a new patch request as an issue (text-only, no patches, starts open).
+// SubmitIssue creates a new patch request as an issue (text-only, no patches).
 // The title is the issue subject, body is the full description.
 func (cmd PrCmd) SubmitIssue(userID int64, userPubkey string, repoName, title, body string) (*PatchRequest, error) {
 	if title == "" {
@@ -517,12 +447,11 @@ func (cmd PrCmd) SubmitIssue(userID int64, userPubkey string, repoName, title, b
 	now := time.Now()
 	var prID int64
 	row := tx.QueryRow(
-		"INSERT INTO patch_requests (user_id, repo_name, name, text, status, updated_at, last_activity) VALUES(?, ?, ?, ?, ?, ?, ?) RETURNING id",
+		"INSERT INTO patch_requests (user_id, repo_name, name, text, updated_at, last_activity) VALUES(?, ?, ?, ?, ?, ?) RETURNING id",
 		userID,
 		repoName,
 		title,
 		body,
-		StatusOpen,
 		now,
 		now,
 	)
