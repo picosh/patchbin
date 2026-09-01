@@ -6,7 +6,7 @@ Contributions are designed to be anonymous: the quality of your work is what mat
 
 The target project doesn't need to run patchbin for someone to submit a patch request against it. It works like a pull request, except both sides collaborate by sending rounds of patchsets: a contributor sends patches, a reviewer replies with their own patches on top, back and forth, as commits rather than comments. The result is a collaborative workspace built entirely out of patches. Reviewing means pulling the code down, not clicking through a diff viewer. Issues work the same way: an issue is just a patch request without any code attached yet, and anyone can follow up with a real patch request on top of it.
 
-There's no accept or reject step. A patch request is simply active or inactive: active ones go inactive after 30 days without activity. When a reviewer is happy with the code, they pull it, merge it, and push upstream themselves; there's nothing to manage here beyond that.
+There's no accept or reject step. A patch request is simply active or inactive: active ones go inactive after 14 days without activity. When a reviewer is happy with the code, they pull it, merge it, and push upstream themselves; there's nothing to manage here beyond that.
 
 ## quickstart
 

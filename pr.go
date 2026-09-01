@@ -178,7 +178,7 @@ func (cmd PrCmd) GetPatchRequestsActive() ([]*PatchRequest, error) {
 	prs := []*PatchRequest{}
 	err := cmd.Backend.DB.Select(
 		&prs,
-		"SELECT * FROM patch_requests WHERE last_activity >= datetime('now', '-30 days') ORDER BY last_activity DESC",
+		"SELECT * FROM patch_requests WHERE last_activity >= datetime('now', '-14 days') ORDER BY last_activity DESC",
 	)
 	return prs, err
 }
@@ -187,7 +187,7 @@ func (cmd PrCmd) GetPatchRequestsInactive() ([]*PatchRequest, error) {
 	prs := []*PatchRequest{}
 	err := cmd.Backend.DB.Select(
 		&prs,
-		"SELECT * FROM patch_requests WHERE last_activity < datetime('now', '-30 days') ORDER BY last_activity DESC",
+		"SELECT * FROM patch_requests WHERE last_activity < datetime('now', '-14 days') ORDER BY last_activity DESC",
 	)
 	return prs, err
 }

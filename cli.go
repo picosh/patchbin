@@ -207,7 +207,7 @@ through a diff viewer. An issue is just a patch request without any code
 attached yet, so anyone can follow up with a real patch request on top of it.
 
 There's no accept/reject step. A patch request is simply active
-or inactive: active ones go inactive after 30 days without activity.
+or inactive: active ones go inactive after 14 days without activity.
 When a reviewer is happy with the code, they pull it, merge it, and
 push upstream themselves; there's nothing to manage here beyond that.
 
