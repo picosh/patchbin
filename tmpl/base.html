@@ -18,7 +18,10 @@
     <header class="box">
       <div class="flex flex-col">
         <nav class="flex gap flex-wrap">
-          <a class="btn-nav {{if eq .Tab ""}}btn-active{{end}}" href="/">patchbin</a>
+          <a class="btn-nav flex items-center {{if eq .Tab ""}}btn-active{{end}}" href="/">
+            <img src="/static/logo-patchbin.svg" alt="patchbin logo" width="20" height="20" />
+            <span style="margin-left: 3px;">patchbin</span>
+          </a>
           <a class="btn-nav {{if eq .Tab "active"}}btn-active{{end}}" href="/prs/active">active</a>
           <a class="btn-nav {{if eq .Tab "inactive"}}btn-active{{end}}" href="/prs/inactive">inactive</a>
           <a class="btn-nav flex items-center" href="/rss">rss</a>
