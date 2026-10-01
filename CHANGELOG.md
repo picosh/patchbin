@@ -2,11 +2,16 @@
 
 Use spec: https://common-changelog.org/
 
-## Staged
+## v2026-10-01
 
 ### Added
 
 - `pr comment {prID}` command to add comments to a PR from stdin (renders in web timeline, bumps PR activity, and appears in cover letter discussion)
+
+### Changed
+
+- PRs are created using a new format: `ssh pr {repo}:{pr_name}`
+- Changed the names of many cli commands, run `ssh pr help` to learn more
 
 ## v2026-08-31
 

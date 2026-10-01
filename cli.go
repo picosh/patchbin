@@ -695,7 +695,8 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 					if isPubkey {
 						eventLogs, err = pr.GetEventLogsByUserID(user.ID)
 					} else if prTarget != "" {
-						prq, _, err := ResolveTarget(pr, prTarget)
+						var prq *PatchRequest
+						prq, _, err = ResolveTarget(pr, prTarget)
 						if err != nil {
 							return err
 						}
