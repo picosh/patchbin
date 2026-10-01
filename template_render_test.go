@@ -3,6 +3,7 @@ package patchbin
 import (
 	"bytes"
 	"html/template"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,57 @@ func TestPatchFileTemplateRendersLineDiffOnly(t *testing.T) {
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("patch-1-foo.go-hunk-0")) {
 		t.Errorf("expected hunk anchor in rendered line diff")
+	}
+}
+
+func TestPRTimelineRendersComment(t *testing.T) {
+	tmpl := getTemplate("pr.html")
+	if tmpl == nil {
+		t.Fatalf("getTemplate returned nil")
+	}
+
+	data := PrDetailData{
+		Page:     "pr",
+		RepoName: "test-repo",
+		Branch:   "main",
+		Logs: []EventLogData{
+			{
+				EventLog: &EventLog{
+					Event: "pr_commented",
+					Data:  EventData{Comment: "Looks great to me!"},
+				},
+				UserData: UserData{
+					Name: "alice",
+				},
+				Date: "2026-10-01",
+			},
+		},
+		Pr: PrData{
+			ID:    1,
+			Title: "Test PR",
+		},
+		MetaData: MetaData{
+			URL: "example.com",
+		},
+		Patchset: &Patchset{},
+		Patch: &PatchData{
+			Patch: &Patch{},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "commented") {
+		t.Errorf("expected 'commented' in rendered timeline, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Looks great to me!") {
+		t.Errorf("expected comment text in rendered timeline, got:\n%s", out)
+	}
+	if !strings.Contains(out, "timeline-comment") {
+		t.Errorf("expected 'timeline-comment' class in rendered timeline, got:\n%s", out)
 	}
 }

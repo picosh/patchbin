@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,12 @@ func testMultiTenantE2E(t *testing.T) {
 	t.Log("Admin adds patchset to user's PR (zero-trust: anyone can add)")
 	suite.adminKey.MustCmd(suite.otherPatch, "pr add "+userPRID)
 
+	t.Log("Admin comments on user's PR")
+	commentOutput := suite.adminKey.MustCmd([]byte("LGTM! Great work on this PR.\n"), "pr comment "+userPRID)
+	if !strings.Contains(commentOutput, "Comment added to PR #"+userPRID) {
+		t.Fatalf("unexpected comment output: %s", commentOutput)
+	}
+
 	t.Log("User creates another PR")
 	suite.userKey.MustCmd(suite.patch, "pr create other-repo")
 
@@ -83,7 +90,16 @@ func testMultiTenantE2E(t *testing.T) {
 	suite.userKey.MustCmd(nil, "pr ls")
 
 	t.Log("View event logs")
-	suite.userKey.MustCmd(nil, "logs")
+	logsOutput := suite.userKey.MustCmd(nil, "logs")
+	if !strings.Contains(logsOutput, "pr_commented") {
+		t.Fatalf("expected pr_commented in event logs, got: %s", logsOutput)
+	}
+
+	t.Log("View PR cover letter to verify comment in discussion")
+	printOutput := suite.userKey.MustCmd(nil, "print "+userPRID)
+	if !strings.Contains(printOutput, "LGTM! Great work on this PR.") {
+		t.Fatalf("expected comment in cover letter discussion, got: %s", printOutput)
+	}
 }
 
 type TestSuite struct {

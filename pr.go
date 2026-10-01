@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -39,6 +40,7 @@ type GitPatchRequest interface {
 	UpdatePatchRequestName(prID int64, userPubkey string, name string) error
 	DeletePatchsetByID(userID, prID int64, patchsetID int64) error
 	SubmitIssue(userID int64, userPubkey string, repoName, title, body string) (*PatchRequest, error)
+	AddComment(prID, userID int64, comment string) error
 	CreateEventLog(tx *sqlx.Tx, eventLog EventLog) error
 	GetEventLogs() ([]*EventLog, error)
 	GetEventLogsByPrID(prID int64) ([]*EventLog, error)
@@ -274,6 +276,45 @@ func (cmd PrCmd) UpdatePatchRequestName(prID int64, userPubkey string, name stri
 		Event:          "pr_name_changed",
 		Data: EventData{
 			Name: name,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return cmd.updateLastActivity(prID)
+}
+
+func (cmd PrCmd) AddComment(prID, userID int64, comment string) error {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return fmt.Errorf("comment cannot be empty")
+	}
+
+	_, err := cmd.GetPatchRequestByID(prID)
+	if err != nil {
+		return err
+	}
+
+	tx, err := cmd.Backend.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	err = cmd.CreateEventLog(tx, EventLog{
+		UserID:         userID,
+		PatchRequestID: sql.NullInt64{Int64: prID, Valid: true},
+		Event:          "pr_commented",
+		Data: EventData{
+			Comment: comment,
 		},
 	})
 	if err != nil {

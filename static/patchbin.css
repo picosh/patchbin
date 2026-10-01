@@ -527,10 +527,13 @@ summary {
   background-color: var(--link-color);
 }
 
-.status-change-comment {
+.status-change-comment,
+.timeline-comment {
   background-color: var(--blockquote-bg);
   padding: var(--grid-height);
   margin-top: var(--grid-height);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .pill-status-accepted {

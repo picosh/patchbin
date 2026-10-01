@@ -2,6 +2,12 @@
 
 Use spec: https://common-changelog.org/
 
+## Staged
+
+### Added
+
+- `pr comment {prID}` command to add comments to a PR from stdin (renders in web timeline, bumps PR activity, and appears in cover letter discussion)
+
 ## v2026-08-31
 
 ### Changed

@@ -46,6 +46,15 @@
               </div>
             </details>
 
+          {{else if eq .Event "pr_commented"}}
+            <div>
+              <span class="font-bold">commented</span>
+              <span class="event-meta">on <date>{{.Date}}</date> &middot; by {{template "user-pill" .UserData}}</span>
+            </div>
+            {{if .Data.Comment}}
+              <div class="timeline-comment">{{.Data.Comment}}</div>
+            {{end}}
+
           {{else}}
             <div>
               <span class="font-bold">
@@ -79,6 +88,9 @@
 
           add changes to patch request:
           <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} pr add {{.Pr.ID}}</pre>
+
+          add comment to patch request:
+          <pre class="m-0">echo "lgtm!" | ssh {{.MetaData.URL}} pr comment {{.Pr.ID}}</pre>
         </div>
       </details>
     </div>

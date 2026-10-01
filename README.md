@@ -50,6 +50,10 @@ ssh {url} help
   ```
   ssh {url} pr edit {prID} "new title"
   ```
+- `pr comment {prID}` - add a comment to a PR from stdin
+  ```
+  echo "looks good to me!" | ssh {url} pr comment {prID}
+  ```
 - `pr summary {prID}` - show metadata, patchsets, and patches for a PR
   ```
   ssh {url} pr summary {prID}

@@ -227,6 +227,10 @@ pr - manage patch requests
     Rename a PR.
     ssh %[2]s pr edit {prID} "new title"
 
+  pr comment {prID}
+    Add a comment to a PR from stdin.
+    echo "lgtm!" | ssh %[2]s pr comment {prID}
+
   pr summary {prID}
     Show metadata, patchsets, and patches for a PR.
     ssh %[2]s pr summary {prID}
@@ -270,11 +274,11 @@ logs - event history
 STDIN
 
   pr create, pr add  expect the output of "git format-patch --stdout"
-  issue create        expects free-form text (the issue body)
+  issue create, pr comment expect free-form text
 
 GUARDS
 
-  To limit abuse, submissions (pr create, pr add, issue create) are capped
+  To limit abuse, submissions (pr create, pr add, issue create, pr comment) are capped
   at %[3]d bytes of stdin, and globally rate limited to %[4]d submissions
   per %[5]s across all users. Contact an admin if you hit these limits.
 
@@ -754,6 +758,53 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 
 							sesh.Printf("%s✔ Submitted new patchset for PR #%d!%s\n\n", ansiGreen, prID, ansiReset)
 							return prSummary(be, pr, sesh, prID)
+						},
+					},
+					{
+						Name:      "comment",
+						Usage:     "Add a comment to a PR",
+						Args:      true,
+						ArgsUsage: "[prID]",
+						Action: func(cCtx *cli.Context) error {
+							if !be.Limiter.Allow() {
+								return be.Limiter.Error()
+							}
+
+							args := cCtx.Args()
+							if !args.Present() {
+								return fmt.Errorf("must provide a patch request ID")
+							}
+
+							prID, err := strToInt(args.First())
+							if err != nil {
+								return err
+							}
+							_, err = pr.GetPatchRequestByID(prID)
+							if err != nil {
+								return err
+							}
+
+							user, err := pr.UpsertUserByPubkey(pubkey)
+							if err != nil {
+								return err
+							}
+
+							body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
+							if err != nil {
+								return fmt.Errorf("failed to read comment from stdin: %w", err)
+							}
+							comment := strings.TrimSpace(string(body))
+							if comment == "" {
+								return fmt.Errorf("must provide comment via stdin")
+							}
+
+							err = pr.AddComment(prID, user.ID, comment)
+							if err != nil {
+								return err
+							}
+
+							sesh.Printf("%s✔ Comment added to PR #%d!%s\n\n", ansiGreen, prID, ansiReset)
+							return nil
 						},
 					},
 				},
