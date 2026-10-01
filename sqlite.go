@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS patch_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   repo_name TEXT NOT NULL DEFAULT '',
+  slug TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   text TEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -39,6 +40,8 @@ CREATE TABLE IF NOT EXISTS patch_requests (
     ON DELETE CASCADE
     ON UPDATE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS patch_requests_repo_slug_idx ON patch_requests (repo_name, slug);
 
 CREATE TABLE IF NOT EXISTS patchsets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -285,6 +288,10 @@ var sqliteMigrations = []string{
 	ALTER TABLE tmp_patch_requests_v3 RENAME TO patch_requests;
 	CREATE INDEX IF NOT EXISTS idx_patch_requests_last_activity ON patch_requests(last_activity);
 	DELETE FROM event_logs WHERE event = 'pr_status_changed';`,
+	// Migration 21: Add slug column to patch_requests, backfill with id, and create unique index
+	`ALTER TABLE patch_requests ADD COLUMN slug TEXT NOT NULL DEFAULT '';
+	UPDATE patch_requests SET slug = CAST(id AS TEXT) WHERE slug = '';
+	CREATE UNIQUE INDEX IF NOT EXISTS patch_requests_repo_slug_idx ON patch_requests (repo_name, slug);`,
 }
 
 // Open opens a database connection.

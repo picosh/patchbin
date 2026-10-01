@@ -33,6 +33,7 @@ type PatchRequest struct {
 	ID           int64     `db:"id"`
 	UserID       int64     `db:"user_id"`
 	RepoName     string    `db:"repo_name"` // Plain string namespace
+	Slug         string    `db:"slug"`
 	Name         string    `db:"name"`
 	Text         string    `db:"text"`
 	CreatedAt    time.Time `db:"created_at"`

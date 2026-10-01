@@ -41,15 +41,6 @@ func formatTable(sesh io.Writer, render func(w io.Writer)) {
 	}
 }
 
-func NewTabWriter(out io.Writer) *tabwriter.Writer {
-	return tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-}
-
-func strToInt(str string) (int64, error) {
-	prID, err := strconv.ParseInt(str, 10, 64)
-	return prID, err
-}
-
 // readStdinLimited reads all of stdin, rejecting input over maxBytes rather
 // than silently truncating it.
 func readStdinLimited(r io.Reader, maxBytes int64) ([]byte, error) {
@@ -64,46 +55,22 @@ func readStdinLimited(r io.Reader, maxBytes int64) ([]byte, error) {
 	return body, nil
 }
 
-func getPatchsetFromOpt(patchsets []*Patchset, optPatchsetID string) (*Patchset, error) {
-	if len(patchsets) == 0 {
-		return nil, fmt.Errorf("no patchsets found")
-	}
-	if optPatchsetID == "" {
-		return patchsets[len(patchsets)-1], nil
-	}
-
-	parsed, err := ParseID(optPatchsetID)
-	if err != nil {
-		return nil, err
-	}
-
-	if parsed.Rev > 0 && parsed.Rev <= len(patchsets) {
-		return patchsets[parsed.Rev-1], nil
-	}
-
-	return nil, fmt.Errorf("cannot find patchset: %s", optPatchsetID)
-}
-
-func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession, prID int64) error {
-	request, err := pr.GetPatchRequestByID(prID)
-	if err != nil {
-		return err
-	}
-
-	sesh.Printf("%s● PR #%d%s  %s%s%s\n", ansiBold, request.ID, ansiReset, ansiBold, request.Name, ansiReset)
+func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession, request *PatchRequest) error {
+	sesh.Printf("%s● PR %s:%s%s  %s%s%s\n", ansiBold, request.RepoName, request.Slug, ansiReset, ansiBold, request.Name, ansiReset)
 	sesh.Printf("  %sRepo:%s   %s\n", ansiGray, ansiReset, request.RepoName)
-	sesh.Printf("  %sURL:%s    https://%s/prs/%d\n", ansiGray, ansiReset, be.Cfg.Url, prID)
+	sesh.Printf("  %sSlug:%s   %s\n", ansiGray, ansiReset, request.Slug)
+	sesh.Printf("  %sURL:%s    https://%s/%s/%s\n", ansiGray, ansiReset, be.Cfg.Url, request.RepoName, request.Slug)
 	sesh.Printf("  %sDate:%s   %s\n", ansiGray, ansiReset, request.CreatedAt.Format(be.Cfg.TimeFormat))
 	sesh.Printf("\n")
 
-	patchsets, err := pr.GetPatchsetsByPrID(prID)
+	patchsets, err := pr.GetPatchsetsByPrID(request.ID)
 	if err != nil {
 		return err
 	}
 
 	sesh.Printf("%s▸ Patchsets%s %s(%d total)%s\n", ansiBold, ansiReset, ansiGray, len(patchsets), ansiReset)
 	formatTable(sesh, func(w io.Writer) {
-		_, _ = fmt.Fprintln(w, "  ID\tUser\tDate")
+		_, _ = fmt.Fprintln(w, "  Rev\tTarget\tUser\tDate")
 		for idx, patchset := range patchsets {
 			user, err := pr.GetUserByID(patchset.UserID)
 			if err != nil {
@@ -114,27 +81,24 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 
 			_, _ = fmt.Fprintf(
 				w,
-				"  %s\t%s\t%s\n",
-				getFormattedPatchsetID(request.ID, idx+1),
+				"  v%d\t%s:%s.%d\t%s\t%s\n",
+				idx+1,
+				request.RepoName,
+				request.Slug,
+				idx+1,
 				displayName,
 				patchset.CreatedAt.Format(be.Cfg.TimeFormat),
 			)
 		}
 	})
 
-	latest, err := getPatchsetFromOpt(patchsets, "")
-	if err != nil {
-		return err
-	}
-
+	latest := patchsets[len(patchsets)-1]
 	patches, err := pr.GetPatchesByPatchsetID(latest.ID)
 	if err != nil {
 		return err
 	}
 
-	latestPsID := getFormattedPatchsetID(request.ID, len(patchsets))
-	sesh.Printf("\n%s▸ Patches%s %s(latest: %s)%s\n", ansiBold, ansiReset, ansiGray, latestPsID, ansiReset)
-
+	sesh.Printf("\n%s▸ Patches%s %s(latest: v%d)%s\n", ansiBold, ansiReset, ansiGray, len(patchsets), ansiReset)
 	formatTable(sesh, func(w io.Writer) {
 		_, _ = fmt.Fprintln(w, "  #\tCommit\tAuthor\tDate\tTitle")
 		for idx, patch := range patches {
@@ -146,7 +110,7 @@ func prSummary(be *Backend, pr GitPatchRequest, sesh *pssh.SSHServerConnSession,
 			_, _ = fmt.Fprintf(
 				w,
 				"  %d\t%s\t%s\t%s\t%s\n",
-				idx,
+				idx+1,
 				truncateSha(patch.CommitSha),
 				author,
 				timestamp,
@@ -211,85 +175,62 @@ or inactive: active ones go inactive after 14 days without activity.
 When a reviewer is happy with the code, they pull it, merge it, and
 push upstream themselves; there's nothing to manage here beyond that.
 
+QUICKSTART
+
+  Submit a patch request (new or follow-up):
+    git format-patch main --stdout | ssh %[2]s {repo}:{slug}
+
+  Pull the latest patchset for checkout (pipes to git am):
+    ssh %[2]s pull {repo}:{slug} | git am -3
+    ssh %[2]s {repo}:{slug}.patch | git am -3
+
+  View PR metadata and discussion:
+    ssh %[2]s show {repo}:{slug}
+
 COMMANDS
 
-pr - manage patch requests
+  {repo}:{slug}
+    Submit a patchset from stdin (creates PR if new, appends if exists).
+    git format-patch main --stdout | ssh %[2]s {repo}:{slug}
 
-  pr create {repo}
-    Submit a new PR from stdin.
-    git format-patch main --stdout | ssh %[2]s pr create {repo}
+  pull {repo}:{slug} [rev]
+    Print mbox patchset for checkout (pipes to git am).
+    ssh %[2]s pull {repo}:{slug} | git am -3
+    ssh %[2]s {repo}:{slug}.patch | git am -3
 
-  pr add {prID}
-    Add a new patchset to an existing PR from stdin.
-    git format-patch main --stdout | ssh %[2]s pr add {prID}
-
-  pr edit {prID} {title}
-    Rename a PR.
-    ssh %[2]s pr edit {prID} "new title"
-
-  pr comment {prID}
-    Add a comment to a PR from stdin.
-    echo "lgtm!" | ssh %[2]s pr comment {prID}
-
-  pr summary {prID}
+  show {repo}:{slug}
     Show metadata, patchsets, and patches for a PR.
-    ssh %[2]s pr summary {prID}
+    ssh %[2]s show {repo}:{slug}
 
-  pr ls [repo] [--active|--inactive|--mine]
-    List PRs.
-    ssh %[2]s pr ls {repo}
+  ls [repo] [--active|--inactive|--mine]
+    List patch requests.
+    ssh %[2]s ls {repo}
 
-issue - text-only patch requests (no code required)
+  comment {repo}:{slug} [msg]
+    Add a comment to a PR (via argument or stdin).
+    ssh %[2]s comment {repo}:{slug} "looks good!"
+    echo "looks good!" | ssh %[2]s comment {repo}:{slug}
 
-  issue create {repo} [--title]
-    Submit a new issue from stdin.
-    echo "steps to reproduce..." | ssh %[2]s issue create {repo} --title "bug: crash on startup"
+  edit {repo}:{slug} {title}
+    Rename a PR (creator only).
+    ssh %[2]s edit {repo}:{slug} "new title"
 
-ps - manage patchsets
-
-  ps rm {prID.rev}
+  rm {repo}:{slug} [rev]
     Remove a patchset and its patches (creator only).
-    ssh %[2]s ps rm {prID}.{rev}
+    ssh %[2]s rm {repo}:{slug}.2
 
-print - print patches for checkout
+  issue {repo}:{slug} [title] [body]
+    Submit a new issue (text-only patch request).
+    ssh %[2]s issue {repo}:{slug} "crash on boot" "repro steps..."
 
-  print {prID}
-    Print the latest patchset for a PR.
-    ssh %[2]s print {prID} | git am -3
-
-  print {prID}.{rev}
-    Print a specific patchset revision.
-    ssh %[2]s print {prID}.{rev} | git am -3
-
-  Cover letters are stored as an empty commit. If you want to keep them
-  when applying, use "git am --keep-empty" (or set it globally with
-  "git config --global am.keepEmpty true").
-
-logs - event history
-
-  logs [--pr ID] [--pubkey]
-    List event logs, optionally filtered to a PR or your own activity.
-    ssh %[2]s logs --pr {prID}
-
-STDIN
-
-  pr create, pr add  expect the output of "git format-patch --stdout"
-  issue create, pr comment expect free-form text
+  logs [--pr {repo}:{slug}] [--pubkey]
+    List event logs with filters.
+    ssh %[2]s logs --pr {repo}:{slug}
 
 GUARDS
 
-  To limit abuse, submissions (pr create, pr add, issue create, pr comment) are capped
-  at %[3]d bytes of stdin, and globally rate limited to %[4]d submissions
-  per %[5]s across all users. Contact an admin if you hit these limits.
-
-  Admins with shell access to the host can ban a pubkey or IP address by
-  inserting a row directly into the "acl" table of the sqlite database:
-
-    sqlite3 data/pr.db "INSERT INTO acl (pubkey, permission) VALUES ('{pubkey}', 'banned')"
-    sqlite3 data/pr.db "INSERT INTO acl (ip_address, permission) VALUES ('{ip}', 'banned')"
-
-  Banned pubkeys/IPs are rejected at SSH auth time. There is currently no
-  SSH command for this; it requires direct database access.
+  To limit abuse, submissions are capped at %[3]d bytes of stdin, and
+  globally rate limited to %[4]d submissions per %[5]s across all users.
 
 Self-host your own patchbin: https://github.com/picosh/patchbin
 `, GITPR_VERSION, url, be.Cfg.MaxStdinBytes, be.Cfg.RateLimitCount, be.Cfg.RateLimitInterval)
@@ -315,76 +256,428 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 		},
 		Commands: []*cli.Command{
 			{
-				Name:  "issue",
-				Usage: "Manage issues (text-only patch requests)",
-				Subcommands: []*cli.Command{
-					{
-						Name:      "create",
-						Usage:     "Submit a new issue (starts as open)",
-						Args:      true,
-						ArgsUsage: "repoName",
-						Flags: []cli.Flag{
-							&cli.StringFlag{
-								Name:  "title",
-								Usage: "issue title (default: first line of stdin)",
-							},
-						},
-						Action: func(cCtx *cli.Context) error {
-							if !be.Limiter.Allow() {
-								return be.Limiter.Error()
-							}
+				Name:      "push",
+				Usage:     "Submit a patchset to <repo>:<slug> (creates PR if new, appends if exists)",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug>",
+				Action: func(cCtx *cli.Context) error {
+					if !be.Limiter.Allow() {
+						return be.Limiter.Error()
+					}
 
-							user, err := pr.UpsertUserByPubkey(pubkey)
-							if err != nil {
-								return err
-							}
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug> (e.g. pico:feat/login)")
+					}
 
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a repo name")
-							}
-							repoName := args.First()
+					target, err := ParseTarget(args.First())
+					if err != nil {
+						return err
+					}
 
-							body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
-							if err != nil {
-								return fmt.Errorf("failed to read issue body from stdin: %w", err)
-							}
-							bodyStr := strings.TrimSpace(string(body))
-							if bodyStr == "" {
-								return fmt.Errorf("must provide issue body via stdin")
-							}
+					user, err := pr.UpsertUserByPubkey(pubkey)
+					if err != nil {
+						return err
+					}
 
-							title := cCtx.String("title")
-							if title == "" {
-								// Use first line as title
-								lines := strings.SplitN(bodyStr, "\n", 2)
-								title = lines[0]
-								if len(lines) > 1 {
-									bodyStr = strings.TrimSpace(lines[1])
-								} else {
-									bodyStr = ""
-								}
-							}
+					body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
+					if err != nil {
+						return fmt.Errorf("failed to read patchset from stdin: %w", err)
+					}
+					if len(strings.TrimSpace(string(body))) == 0 {
+						return fmt.Errorf("no patch data received on stdin\n\nTo submit a patch:\n  git format-patch main --stdout | ssh %s %s:%s\n\nTo view this PR:\n  ssh %s show %s:%s\n\nTo pull this patchset:\n  ssh %s pull %s:%s | git am -3", url, target.Repo, target.Slug, url, target.Repo, target.Slug, url, target.Repo, target.Slug)
+					}
 
-							prq, err := pr.SubmitIssue(user.ID, pubkey, repoName, title, bodyStr)
-							if err != nil {
-								return err
-							}
+					prq, err := pr.GetPatchRequestByRepoAndSlug(target.Repo, target.Slug)
+					if err != nil {
+						// Create new PR
+						prq, err = pr.SubmitPatchRequest(user.ID, pubkey, target.Repo, target.Slug, bytes.NewReader(body))
+						if err != nil {
+							return err
+						}
+						sesh.Printf("%s✔ PR %s:%s created!%s\n\n", ansiGreen, target.Repo, target.Slug, ansiReset)
+						return prSummary(be, pr, sesh, prq)
+					}
 
-							sesh.Printf("%s✔ Issue #%d created!%s\n\n", ansiGreen, prq.ID, ansiReset)
-							return prSummary(be, pr, sesh, prq.ID)
-						},
+					// Append patchset to existing PR
+					patches, err := pr.SubmitPatchset(prq.ID, user.ID, OpNormal, bytes.NewReader(body))
+					if err != nil {
+						return err
+					}
+
+					if len(patches) == 0 {
+						sesh.Printf("%sPatches submitted!%s However none were saved, probably because they already exist in the system.\n\n", ansiYellow, ansiReset)
+						return nil
+					}
+
+					sesh.Printf("%s✔ Submitted new patchset for PR %s:%s!%s\n\n", ansiGreen, target.Repo, target.Slug, ansiReset)
+					return prSummary(be, pr, sesh, prq)
+				},
+			},
+			{
+				Name:      "pull",
+				Usage:     "Print patches in a patchset for git am checkout",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug>[.rev] or <repo>:<slug> [rev]",
+				Action: func(cCtx *cli.Context) error {
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug> (e.g. pico:feat/login)")
+					}
+
+					raw := args.First()
+					if args.Len() > 1 {
+						if rev, err := strconv.Atoi(args.Get(1)); err == nil && rev > 0 {
+							raw = fmt.Sprintf("%s.%d", strings.TrimSuffix(raw, ".patch"), rev)
+						}
+					}
+
+					_, ps, err := ResolveTarget(pr, raw)
+					if err != nil {
+						return err
+					}
+
+					return printCoverLetterForPatchset(sesh, be, pr, ps)
+				},
+			},
+			{
+				Name:      "show",
+				Usage:     "Show metadata, patchsets, and patches for a PR",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug>",
+				Action: func(cCtx *cli.Context) error {
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug> (e.g. pico:feat/login)")
+					}
+
+					target, err := ParseTarget(args.First())
+					if err != nil {
+						return err
+					}
+
+					prq, err := pr.GetPatchRequestByRepoAndSlug(target.Repo, target.Slug)
+					if err != nil {
+						return fmt.Errorf("cannot find PR %s:%s", target.Repo, target.Slug)
+					}
+
+					return prSummary(be, pr, sesh, prq)
+				},
+			},
+			{
+				Name:      "ls",
+				Usage:     "List patch requests",
+				Args:      true,
+				ArgsUsage: "[repo]",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "active",
+						Usage: "only show active PRs (activity in last 14 days)",
 					},
+					&cli.BoolFlag{
+						Name:  "inactive",
+						Usage: "only show inactive PRs (no activity in 14 days)",
+					},
+					&cli.BoolFlag{
+						Name:  "mine",
+						Usage: "only show your own PRs",
+					},
+				},
+				Action: func(cCtx *cli.Context) error {
+					args := cCtx.Args()
+					repoName := args.First()
+					var prs []*PatchRequest
+					var err error
+					if repoName == "" {
+						prs, err = pr.GetPatchRequests()
+					} else {
+						prs, err = pr.GetPatchRequestsByRepoName(repoName)
+					}
+					if err != nil {
+						return err
+					}
+
+					onlyActive := cCtx.Bool("active")
+					onlyInactive := cCtx.Bool("inactive")
+					onlyMine := cCtx.Bool("mine")
+					cutoff := time.Now().AddDate(0, 0, -14)
+
+					if repoName == "" {
+						sesh.Printf("%s▸ Patch Requests%s\n\n", ansiBold, ansiReset)
+					} else {
+						sesh.Printf("%s▸ Patch Requests%s %s(%s)%s\n\n", ansiBold, ansiReset, ansiGray, repoName, ansiReset)
+					}
+
+					var matching []*PatchRequest
+					for _, req := range prs {
+						if onlyActive && req.LastActivity.Before(cutoff) {
+							continue
+						}
+						if onlyInactive && req.LastActivity.After(cutoff) {
+							continue
+						}
+
+						user, err := pr.GetUserByID(req.UserID)
+						if err != nil {
+							be.Logger.Error("could not get user for pr", "err", err)
+							continue
+						}
+
+						if onlyMine && user.Pubkey != pubkey {
+							continue
+						}
+
+						matching = append(matching, req)
+					}
+
+					if len(matching) == 0 {
+						sesh.Printf("  %s(No patch requests found)%s\n", ansiGray, ansiReset)
+						return nil
+					}
+
+					formatTable(sesh, func(w io.Writer) {
+						_, _ = fmt.Fprintln(w, "  Target\tPatchsets\tUser\tLast Activity\tTitle")
+						for _, req := range matching {
+							user, _ := pr.GetUserByID(req.UserID)
+							patchsets, err := pr.GetPatchsetsByPrID(req.ID)
+							if err != nil {
+								be.Logger.Error("could not get patchsets for pr", "err", err)
+								continue
+							}
+
+							displayName := be.ComputeUserName(user.Pubkey)
+
+							_, _ = fmt.Fprintf(
+								w,
+								"  %s:%s\t%d\t%s\t%s\t%s\n",
+								req.RepoName,
+								req.Slug,
+								len(patchsets),
+								displayName,
+								req.LastActivity.Format(be.Cfg.TimeFormat),
+								req.Name,
+							)
+						}
+					})
+					return nil
+				},
+			},
+			{
+				Name:      "comment",
+				Usage:     "Add a comment to a PR",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug> [message]",
+				Action: func(cCtx *cli.Context) error {
+					if !be.Limiter.Allow() {
+						return be.Limiter.Error()
+					}
+
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug> (e.g. pico:feat/login)")
+					}
+
+					target, err := ParseTarget(args.First())
+					if err != nil {
+						return err
+					}
+
+					prq, err := pr.GetPatchRequestByRepoAndSlug(target.Repo, target.Slug)
+					if err != nil {
+						return fmt.Errorf("cannot find PR %s:%s", target.Repo, target.Slug)
+					}
+
+					user, err := pr.UpsertUserByPubkey(pubkey)
+					if err != nil {
+						return err
+					}
+
+					var comment string
+					if args.Len() > 1 {
+						comment = strings.TrimSpace(strings.Join(args.Slice()[1:], " "))
+					} else {
+						body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
+						if err != nil {
+							return fmt.Errorf("failed to read comment from stdin: %w", err)
+						}
+						comment = strings.TrimSpace(string(body))
+					}
+
+					if comment == "" {
+						return fmt.Errorf("must provide comment via argument or stdin")
+					}
+
+					err = pr.AddComment(prq.ID, user.ID, comment)
+					if err != nil {
+						return err
+					}
+
+					sesh.Printf("%s✔ Comment added to PR %s:%s!%s\n\n", ansiGreen, prq.RepoName, prq.Slug, ansiReset)
+					return nil
+				},
+			},
+			{
+				Name:      "edit",
+				Usage:     "Edit a PR's title (creator only)",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug> <title>",
+				Action: func(cCtx *cli.Context) error {
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug> (e.g. pico:feat/login)")
+					}
+
+					target, err := ParseTarget(args.First())
+					if err != nil {
+						return err
+					}
+
+					prq, err := pr.GetPatchRequestByRepoAndSlug(target.Repo, target.Slug)
+					if err != nil {
+						return fmt.Errorf("cannot find PR %s:%s", target.Repo, target.Slug)
+					}
+
+					if args.Len() < 2 {
+						return fmt.Errorf("must provide new title")
+					}
+					title := strings.TrimSpace(strings.Join(args.Slice()[1:], " "))
+					if title == "" {
+						return fmt.Errorf("must provide new title")
+					}
+
+					err = pr.UpdatePatchRequestName(prq.ID, pubkey, title)
+					if err != nil {
+						return err
+					}
+
+					sesh.Printf("%s✔ Updated PR %s:%s title to: %s%s\n\n", ansiGreen, prq.RepoName, prq.Slug, title, ansiReset)
+					return nil
+				},
+			},
+			{
+				Name:      "rm",
+				Usage:     "Remove a patchset and its patches (creator only)",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug>.<rev> or <repo>:<slug> [rev]",
+				Action: func(cCtx *cli.Context) error {
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug>.<rev> (e.g. pico:feat/login.2)")
+					}
+
+					raw := args.First()
+					if args.Len() > 1 {
+						if rev, err := strconv.Atoi(args.Get(1)); err == nil && rev > 0 {
+							raw = fmt.Sprintf("%s.%d", raw, rev)
+						}
+					}
+
+					prq, patchset, err := ResolveTarget(pr, raw)
+					if err != nil {
+						return err
+					}
+
+					user, err := pr.GetUserByID(patchset.UserID)
+					if err != nil {
+						return err
+					}
+
+					if pubkey != user.Pubkey {
+						return fmt.Errorf("you are not authorized to delete this patchset (only the creator can delete)")
+					}
+
+					rev := getPatchsetRev(pr, patchset)
+					err = pr.DeletePatchsetByID(user.ID, prq.ID, patchset.ID)
+					if err != nil {
+						return err
+					}
+
+					sesh.Printf("%s✔ Removed patchset %s:%s.%d.%s\n", ansiGreen, prq.RepoName, prq.Slug, rev, ansiReset)
+					return nil
+				},
+			},
+			{
+				Name:      "issue",
+				Usage:     "Submit a new issue (text-only patch request)",
+				Args:      true,
+				ArgsUsage: "<repo>:<slug> [title] [body]",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "title",
+						Usage: "issue title (default: first line of stdin or 2nd argument)",
+					},
+				},
+				Action: func(cCtx *cli.Context) error {
+					if !be.Limiter.Allow() {
+						return be.Limiter.Error()
+					}
+
+					user, err := pr.UpsertUserByPubkey(pubkey)
+					if err != nil {
+						return err
+					}
+
+					args := cCtx.Args()
+					if !args.Present() {
+						return fmt.Errorf("must provide target in format <repo>:<slug> (e.g. pico:issue-1)")
+					}
+
+					target, err := ParseTarget(args.First())
+					if err != nil {
+						return err
+					}
+
+					title := cCtx.String("title")
+					var bodyStr string
+
+					if args.Len() > 1 {
+						if title == "" {
+							title = args.Get(1)
+							if args.Len() > 2 {
+								bodyStr = strings.Join(args.Slice()[2:], " ")
+							}
+						} else {
+							bodyStr = strings.Join(args.Slice()[1:], " ")
+						}
+					}
+
+					if bodyStr == "" {
+						body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
+						if err != nil {
+							return fmt.Errorf("failed to read issue body from stdin: %w", err)
+						}
+						bodyStr = strings.TrimSpace(string(body))
+					}
+
+					if title == "" {
+						if bodyStr == "" {
+							return fmt.Errorf("must provide issue title or body")
+						}
+						lines := strings.SplitN(bodyStr, "\n", 2)
+						title = lines[0]
+						if len(lines) > 1 {
+							bodyStr = strings.TrimSpace(lines[1])
+						} else {
+							bodyStr = ""
+						}
+					}
+
+					prq, err := pr.SubmitIssue(user.ID, pubkey, target.Repo, target.Slug, title, bodyStr)
+					if err != nil {
+						return err
+					}
+
+					sesh.Printf("%s✔ Issue %s:%s created!%s\n\n", ansiGreen, prq.RepoName, prq.Slug, ansiReset)
+					return prSummary(be, pr, sesh, prq)
 				},
 			},
 			{
 				Name:  "logs",
 				Usage: "List event logs with filters",
-				Args:  true,
 				Flags: []cli.Flag{
-					&cli.Int64Flag{
+					&cli.StringFlag{
 						Name:  "pr",
-						Usage: "show all events related to the provided patch request",
+						Usage: "show all events related to the provided PR (<repo>:<slug>)",
 					},
 					&cli.BoolFlag{
 						Name:  "pubkey",
@@ -397,12 +690,16 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 						return err
 					}
 					isPubkey := cCtx.Bool("pubkey")
-					prID := cCtx.Int64("pr")
+					prTarget := cCtx.String("pr")
 					var eventLogs []*EventLog
 					if isPubkey {
 						eventLogs, err = pr.GetEventLogsByUserID(user.ID)
-					} else if prID != 0 {
-						eventLogs, err = pr.GetEventLogsByPrID(prID)
+					} else if prTarget != "" {
+						prq, _, err := ResolveTarget(pr, prTarget)
+						if err != nil {
+							return err
+						}
+						eventLogs, err = pr.GetEventLogsByPrID(prq.ID)
 					} else {
 						eventLogs, err = pr.GetEventLogs()
 					}
@@ -417,11 +714,16 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 					}
 
 					formatTable(sesh, func(w io.Writer) {
-						_, _ = fmt.Fprintln(w, "  PrID\tPatchsetID\tEvent\tCreated\tData")
+						_, _ = fmt.Fprintln(w, "  Target\tPatchset\tEvent\tCreated\tData")
 						for _, eventLog := range eventLogs {
-							prIDStr := "-"
+							targetStr := "-"
 							if eventLog.PatchRequestID.Valid && eventLog.PatchRequestID.Int64 > 0 {
-								prIDStr = fmt.Sprintf("%d", eventLog.PatchRequestID.Int64)
+								prq, err := pr.GetPatchRequestByID(eventLog.PatchRequestID.Int64)
+								if err == nil {
+									targetStr = fmt.Sprintf("%s:%s", prq.RepoName, prq.Slug)
+								} else {
+									targetStr = fmt.Sprintf("#%d", eventLog.PatchRequestID.Int64)
+								}
 							}
 
 							psIDStr := "-"
@@ -429,7 +731,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 								ps, err := pr.GetPatchsetByID(eventLog.PatchsetID.Int64)
 								if err == nil {
 									rev := getPatchsetRev(pr, ps)
-									psIDStr = getFormattedPatchsetID(ps.PatchRequestID, rev)
+									psIDStr = fmt.Sprintf("v%d", rev)
 								} else {
 									psIDStr = fmt.Sprintf("v%d", eventLog.PatchsetID.Int64)
 								}
@@ -438,7 +740,7 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 							_, _ = fmt.Fprintf(
 								w,
 								"  %s\t%s\t%s\t%s\t%s\n",
-								prIDStr,
+								targetStr,
 								psIDStr,
 								eventLog.Event,
 								eventLog.CreatedAt.Format(be.Cfg.TimeFormat),
@@ -447,366 +749,6 @@ Self-host your own patchbin: https://github.com/picosh/patchbin
 						}
 					})
 					return nil
-				},
-			},
-			{
-				Name:  "ps",
-				Usage: "Manage patchsets",
-				Subcommands: []*cli.Command{
-					{
-						Name:      "rm",
-						Usage:     "Remove a patchset and its patches",
-						Args:      true,
-						ArgsUsage: "[X.Y]",
-						Action: func(cCtx *cli.Context) error {
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patchset ID (e.g. 1.2)")
-							}
-
-							parsed, err := ParseID(args.First())
-							if err != nil {
-								return err
-							}
-
-							patchset, err := GetPatchsetByParsedID(pr, parsed)
-							if err != nil {
-								return err
-							}
-
-							user, err := pr.GetUserByID(patchset.UserID)
-							if err != nil {
-								return err
-							}
-
-							if pubkey != user.Pubkey {
-								return fmt.Errorf("you are not authorized to delete this patchset (only the creator can delete)")
-							}
-
-							err = pr.DeletePatchsetByID(user.ID, patchset.PatchRequestID, patchset.ID)
-							if err != nil {
-								return err
-							}
-
-							rev := getPatchsetRev(pr, patchset)
-							sesh.Printf("%s✔ Removed patchset %d.%d.%s\n", ansiGreen, patchset.PatchRequestID, rev, ansiReset)
-							return nil
-						},
-					},
-				},
-			},
-			{
-				Name:      "print",
-				Usage:     "Print patches in a patchset",
-				Args:      true,
-				ArgsUsage: "[X] or [X.Y]",
-				Action: func(cCtx *cli.Context) error {
-					args := cCtx.Args()
-					if !args.Present() {
-						return fmt.Errorf("must provide ID in format: X or X.Y")
-					}
-
-					parsed, err := ParseID(args.First())
-					if err != nil {
-						return err
-					}
-
-					patchset, err := GetPatchsetByParsedID(pr, parsed)
-					if err != nil {
-						return err
-					}
-
-					return printCoverLetterForPatchset(sesh, be, pr, patchset)
-				},
-			},
-			{
-				Name:  "pr",
-				Usage: "Manage patch requests (PR)",
-				Subcommands: []*cli.Command{
-					{
-						Name:      "ls",
-						Usage:     "List all PRs",
-						Args:      true,
-						ArgsUsage: "[repoName]",
-						Flags: []cli.Flag{
-							&cli.BoolFlag{
-								Name:  "active",
-								Usage: "only show active PRs (activity in last 30 days)",
-							},
-							&cli.BoolFlag{
-								Name:  "inactive",
-								Usage: "only show inactive PRs (no activity in 30 days)",
-							},
-							&cli.BoolFlag{
-								Name:  "mine",
-								Usage: "only show your own PRs",
-							},
-						},
-						Action: func(cCtx *cli.Context) error {
-							args := cCtx.Args()
-							repoName := args.First()
-							var prs []*PatchRequest
-							var err error
-							if repoName == "" {
-								prs, err = pr.GetPatchRequests()
-								if err != nil {
-									return err
-								}
-							} else {
-								prs, err = pr.GetPatchRequestsByRepoName(repoName)
-								if err != nil {
-									return err
-								}
-							}
-
-							onlyActive := cCtx.Bool("active")
-							onlyInactive := cCtx.Bool("inactive")
-							onlyMine := cCtx.Bool("mine")
-							cutoff := time.Now().AddDate(0, 0, -30)
-
-							if repoName == "" {
-								sesh.Printf("%s▸ Patch Requests%s\n\n", ansiBold, ansiReset)
-							} else {
-								sesh.Printf("%s▸ Patch Requests%s %s(%s)%s\n\n", ansiBold, ansiReset, ansiGray, repoName, ansiReset)
-							}
-
-							var matching []*PatchRequest
-							for _, req := range prs {
-								if onlyActive && req.LastActivity.Before(cutoff) {
-									continue
-								}
-
-								if onlyInactive && req.LastActivity.After(cutoff) {
-									continue
-								}
-
-								user, err := pr.GetUserByID(req.UserID)
-								if err != nil {
-									be.Logger.Error("could not get user for pr", "err", err)
-									continue
-								}
-
-								if onlyMine && user.Pubkey != pubkey {
-									continue
-								}
-
-								matching = append(matching, req)
-							}
-
-							if len(matching) == 0 {
-								sesh.Printf("  %s(No patch requests found)%s\n", ansiGray, ansiReset)
-								return nil
-							}
-
-							formatTable(sesh, func(w io.Writer) {
-								_, _ = fmt.Fprintln(w, "  ID\tRepo\tPatchsets\tUser\tLast Activity\tTitle")
-								for _, req := range matching {
-									user, _ := pr.GetUserByID(req.UserID)
-									patchsets, err := pr.GetPatchsetsByPrID(req.ID)
-									if err != nil {
-										be.Logger.Error("could not get patchsets for pr", "err", err)
-										continue
-									}
-
-									displayName := be.ComputeUserName(user.Pubkey)
-
-									_, _ = fmt.Fprintf(
-										w,
-										"  %d\t%s\t%d\t%s\t%s\t%s\n",
-										req.ID,
-										req.RepoName,
-										len(patchsets),
-										displayName,
-										req.LastActivity.Format(be.Cfg.TimeFormat),
-										req.Name,
-									)
-								}
-							})
-							return nil
-						},
-					},
-					{
-						Name:      "create",
-						Usage:     "Submit a new PR",
-						Args:      true,
-						ArgsUsage: "repoName",
-						Action: func(cCtx *cli.Context) error {
-							if !be.Limiter.Allow() {
-								return be.Limiter.Error()
-							}
-
-							user, err := pr.UpsertUserByPubkey(pubkey)
-							if err != nil {
-								return err
-							}
-
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a repo name")
-							}
-							repoName := args.First()
-
-							body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
-							if err != nil {
-								return fmt.Errorf("failed to read patchset from stdin: %w", err)
-							}
-
-							prq, err := pr.SubmitPatchRequest(user.ID, pubkey, repoName, bytes.NewReader(body))
-							if err != nil {
-								return err
-							}
-
-							return prSummary(be, pr, sesh, prq.ID)
-						},
-					},
-					{
-						Name:      "summary",
-						Usage:     "Show metadata, patchsets, and patches for a PR",
-						Args:      true,
-						ArgsUsage: "[prID]",
-						Action: func(cCtx *cli.Context) error {
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patch request ID")
-							}
-
-							prID, err := strToInt(args.First())
-							if err != nil {
-								return err
-							}
-							return prSummary(be, pr, sesh, prID)
-						},
-					},
-					{
-						Name:      "edit",
-						Usage:     "Edit a PR's title",
-						Args:      true,
-						ArgsUsage: "[prID] [title]",
-						Action: func(cCtx *cli.Context) error {
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patch request ID")
-							}
-
-							prID, err := strToInt(args.First())
-							if err != nil {
-								return err
-							}
-							prq, err := pr.GetPatchRequestByID(prID)
-							if err != nil {
-								return err
-							}
-
-							tail := cCtx.Args().Tail()
-							title := strings.Join(tail, " ")
-							if title == "" {
-								return fmt.Errorf("must provide title")
-							}
-
-							err = pr.UpdatePatchRequestName(prID, pubkey, title)
-							if err != nil {
-								return err
-							}
-							sesh.Printf("%s✔ Updated PR #%d title to: %s%s\n\n", ansiGreen, prq.ID, title, ansiReset)
-
-							return err
-						},
-					},
-					{
-						Name:      "add",
-						Usage:     "Add a new patchset to a PR",
-						Args:      true,
-						ArgsUsage: "[prID]",
-						Action: func(cCtx *cli.Context) error {
-							if !be.Limiter.Allow() {
-								return be.Limiter.Error()
-							}
-
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patch request ID")
-							}
-
-							prID, err := strToInt(args.First())
-							if err != nil {
-								return err
-							}
-							_, err = pr.GetPatchRequestByID(prID)
-							if err != nil {
-								return err
-							}
-
-							user, err := pr.UpsertUserByPubkey(pubkey)
-							if err != nil {
-								return err
-							}
-
-							body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
-							if err != nil {
-								return fmt.Errorf("failed to read patchset from stdin: %w", err)
-							}
-
-							patches, err := pr.SubmitPatchset(prID, user.ID, OpNormal, bytes.NewReader(body))
-							if err != nil {
-								return err
-							}
-
-							if len(patches) == 0 {
-								sesh.Printf("%sPatches submitted!%s However none were saved, probably because they already exist in the system.\n\n", ansiYellow, ansiReset)
-								return nil
-							}
-
-							sesh.Printf("%s✔ Submitted new patchset for PR #%d!%s\n\n", ansiGreen, prID, ansiReset)
-							return prSummary(be, pr, sesh, prID)
-						},
-					},
-					{
-						Name:      "comment",
-						Usage:     "Add a comment to a PR",
-						Args:      true,
-						ArgsUsage: "[prID]",
-						Action: func(cCtx *cli.Context) error {
-							if !be.Limiter.Allow() {
-								return be.Limiter.Error()
-							}
-
-							args := cCtx.Args()
-							if !args.Present() {
-								return fmt.Errorf("must provide a patch request ID")
-							}
-
-							prID, err := strToInt(args.First())
-							if err != nil {
-								return err
-							}
-							_, err = pr.GetPatchRequestByID(prID)
-							if err != nil {
-								return err
-							}
-
-							user, err := pr.UpsertUserByPubkey(pubkey)
-							if err != nil {
-								return err
-							}
-
-							body, err := readStdinLimited(sesh, be.Cfg.MaxStdinBytes)
-							if err != nil {
-								return fmt.Errorf("failed to read comment from stdin: %w", err)
-							}
-							comment := strings.TrimSpace(string(body))
-							if comment == "" {
-								return fmt.Errorf("must provide comment via stdin")
-							}
-
-							err = pr.AddComment(prID, user.ID, comment)
-							if err != nil {
-								return err
-							}
-
-							sesh.Printf("%s✔ Comment added to PR #%d!%s\n\n", ansiGreen, prID, ansiReset)
-							return nil
-						},
-					},
 				},
 			},
 		},

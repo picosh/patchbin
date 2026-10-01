@@ -3,7 +3,7 @@
   {{$selectedID := .Patch.ID}}
   {{range $idx, $patch := .Patches}}
     <a class="commit-list-item flex justify-between items-center gap{{if eq $patch.ID $selectedID}} commit-list-item-active{{end}}"
-       href="/prs/{{$.FormattedPatchsetID}}/patches/{{$patch.ID}}">
+       href="/{{$.FormattedPatchsetID}}/patches/{{$patch.ID}}">
       <span class="mono truncate" style="flex: 1;">
         {{if eq $patch.ID $selectedID}}<span class="text-md" style="color: var(--success);">&rarr;</span> {{end}}{{$patch.Title}}
       </span>

@@ -35,13 +35,13 @@ func testSingleTenantE2E(t *testing.T) {
 
 	// Users are auto-created on first use, no registration needed
 	t.Log("User should be able to create a PR")
-	suite.userKey.MustCmd(suite.patch, "pr create test")
+	suite.userKey.MustCmd(suite.patch, "push test:single-tenant")
 
-	t.Log("Admin should also be able to create a PR")
-	suite.adminKey.MustCmd(suite.patch, "pr create test")
+	t.Log("Admin should also be able to create a PR via shorthand")
+	suite.adminKey.MustCmd(suite.patch, "test:admin-single-tenant")
 
 	t.Log("List PRs")
-	suite.userKey.MustCmd(nil, "pr ls")
+	suite.userKey.MustCmd(nil, "ls")
 }
 
 func testMultiTenantE2E(t *testing.T) {
@@ -65,29 +65,31 @@ func testMultiTenantE2E(t *testing.T) {
 	// Anyone can create PRs in any repo
 
 	t.Log("User creates PR")
-	output := suite.userKey.MustCmd(suite.patch, "pr create test")
-	userPRID := util.ParsePRID(output)
+	output := suite.userKey.MustCmd(suite.patch, "push test:my-pr")
+	if !strings.Contains(output, "PR test:my-pr created") {
+		t.Fatalf("unexpected create output: %s", output)
+	}
 
 	t.Log("User edits PR title (only creator can edit)")
-	suite.userKey.MustCmd(nil, "pr edit "+userPRID+" Updated title")
+	suite.userKey.MustCmd(nil, "edit test:my-pr Updated title")
 
 	t.Log("Admin creates PR")
-	suite.adminKey.MustCmd(suite.patch, "pr create admin-repo")
+	suite.adminKey.MustCmd(suite.patch, "push admin-repo:admin-pr")
 
 	t.Log("Admin adds patchset to user's PR (zero-trust: anyone can add)")
-	suite.adminKey.MustCmd(suite.otherPatch, "pr add "+userPRID)
+	suite.adminKey.MustCmd(suite.otherPatch, "push test:my-pr")
 
 	t.Log("Admin comments on user's PR")
-	commentOutput := suite.adminKey.MustCmd([]byte("LGTM! Great work on this PR.\n"), "pr comment "+userPRID)
-	if !strings.Contains(commentOutput, "Comment added to PR #"+userPRID) {
+	commentOutput := suite.adminKey.MustCmd([]byte("LGTM! Great work on this PR.\n"), "comment test:my-pr")
+	if !strings.Contains(commentOutput, "Comment added to PR test:my-pr") {
 		t.Fatalf("unexpected comment output: %s", commentOutput)
 	}
 
 	t.Log("User creates another PR")
-	suite.userKey.MustCmd(suite.patch, "pr create other-repo")
+	suite.userKey.MustCmd(suite.patch, "push other-repo:other-pr")
 
 	t.Log("List PRs")
-	suite.userKey.MustCmd(nil, "pr ls")
+	suite.userKey.MustCmd(nil, "ls")
 
 	t.Log("View event logs")
 	logsOutput := suite.userKey.MustCmd(nil, "logs")
@@ -95,10 +97,16 @@ func testMultiTenantE2E(t *testing.T) {
 		t.Fatalf("expected pr_commented in event logs, got: %s", logsOutput)
 	}
 
-	t.Log("View PR cover letter to verify comment in discussion")
-	printOutput := suite.userKey.MustCmd(nil, "print "+userPRID)
-	if !strings.Contains(printOutput, "LGTM! Great work on this PR.") {
-		t.Fatalf("expected comment in cover letter discussion, got: %s", printOutput)
+	t.Log("View PR cover letter to verify comment in discussion via pull")
+	pullOutput := suite.userKey.MustCmd(nil, "pull test:my-pr")
+	if !strings.Contains(pullOutput, "LGTM! Great work on this PR.") {
+		t.Fatalf("expected comment in cover letter discussion, got: %s", pullOutput)
+	}
+
+	t.Log("Verify shorthand pull works")
+	shorthandPull := suite.userKey.MustCmd(nil, "test:my-pr.patch")
+	if !strings.Contains(shorthandPull, "LGTM! Great work on this PR.") {
+		t.Fatalf("expected comment in shorthand pull, got: %s", shorthandPull)
 	}
 }
 

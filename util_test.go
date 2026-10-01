@@ -130,3 +130,40 @@ func TestGetFormattedPatchsetID(t *testing.T) {
 		t.Errorf("expected empty string, got %q", got)
 	}
 }
+
+func TestParseTarget(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected Target
+		wantErr  bool
+	}{
+		{input: "pico:feat/login", expected: Target{Repo: "pico", Slug: "feat/login", Rev: 0}},
+		{input: "pico:feat/login.2", expected: Target{Repo: "pico", Slug: "feat/login", Rev: 2}},
+		{input: "pico:feat/login.v3", expected: Target{Repo: "pico", Slug: "feat/login", Rev: 3}},
+		{input: "pico:feat/login.patch", expected: Target{Repo: "pico", Slug: "feat/login", Rev: 0}},
+		{input: "pico:feat/login.2.patch", expected: Target{Repo: "pico", Slug: "feat/login", Rev: 2}},
+		{input: "my-repo:123", expected: Target{Repo: "my-repo", Slug: "123", Rev: 0}},
+		{input: "my-repo:123.4", expected: Target{Repo: "my-repo", Slug: "123", Rev: 4}},
+		{input: "no-colon", wantErr: true},
+		{input: ":no-repo", wantErr: true},
+		{input: "no-slug:", wantErr: true},
+		{input: "repo:slug with spaces", wantErr: true},
+		{input: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		got, err := ParseTarget(tt.input)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("ParseTarget(%q) expected error, got nil", tt.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("ParseTarget(%q) unexpected error: %v", tt.input, err)
+			}
+			if got != tt.expected {
+				t.Errorf("ParseTarget(%q) = %+v, expected %+v", tt.input, got, tt.expected)
+			}
+		}
+	}
+}

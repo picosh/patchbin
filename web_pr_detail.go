@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
@@ -30,6 +31,7 @@ type PatchsetData struct {
 type PrData struct {
 	UserData
 	ID    int64
+	Slug  string
 	Title string
 	Date  string
 }
@@ -133,7 +135,7 @@ func getAllPatchData(web *WebCtx, pr *PatchRequest, ps *Patchset) (*AllPatchData
 		displayName := web.Backend.ComputeUserName(user.Pubkey)
 		data := PatchsetData{
 			Patchset:    patchset,
-			FormattedID: getFormattedPatchsetID(pr.ID, idx+1),
+			FormattedID: fmt.Sprintf("%s/%s.%d", pr.RepoName, pr.Slug, idx+1),
 			UserData: UserData{
 				UserID:    user.ID,
 				Name:      displayName,
@@ -297,29 +299,74 @@ func getLogData(web *WebCtx, prID int64, patchsetsData []*PatchsetData) ([]Event
 }
 
 func createPrDetail(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	parsed, err := ParseID(id)
-	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
-
 	web, err := getWebCtx(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	pr, err := web.Pr.GetPatchRequestByID(parsed.PrID)
-	if err != nil {
-		web.Pr.Backend.Logger.Error("cannot get pr", "err", err)
-		w.WriteHeader(http.StatusNotFound)
+	repo := r.PathValue("repo")
+	slugPath := r.PathValue("slug")
+
+	if repo == "prs" {
+		redirectLegacyPr(w, r)
 		return
 	}
 
-	ps, err := GetPatchsetByParsedID(web.Pr, parsed)
+	// Repo RSS mode (e.g. /{repo}/rss)
+	if slugPath == "rss" {
+		repoRssHandler(w, r)
+		return
+	}
+
+	// 1. Raw patch mode (.patch suffix)
+	if strings.HasSuffix(slugPath, ".patch") {
+		cleanSlug := strings.TrimSuffix(slugPath, ".patch")
+		pr, ps, err := ResolveTarget(web.Pr, fmt.Sprintf("%s:%s", repo, cleanSlug))
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		patches, err := web.Pr.GetPatchesByPatchsetID(ps.ID)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		events, err := web.Pr.GetEventLogsByPrID(ps.PatchRequestID)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		users := resolveUsers(web.Pr, events)
+		mbox := GenerateMboxWithCoverLetter(pr, patches, events, users, web.Backend.Cfg.Url)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(mbox))
+		return
+	}
+
+	// 2. PR RSS mode (/rss suffix)
+	if strings.HasSuffix(slugPath, "/rss") {
+		cleanSlug := strings.TrimSuffix(slugPath, "/rss")
+		pr, _, err := ResolveTarget(web.Pr, fmt.Sprintf("%s:%s", repo, cleanSlug))
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		renderPrRss(w, r, web, pr)
+		return
+	}
+
+	// 3. Patch diff navigation (/patches/{patchID})
+	var patchID int64
+	if idx := strings.Index(slugPath, "/patches/"); idx != -1 {
+		patchIDStr := slugPath[idx+len("/patches/"):]
+		patchID, _ = strconv.ParseInt(patchIDStr, 10, 64)
+		slugPath = slugPath[:idx]
+	}
+
+	pr, ps, err := ResolveTarget(web.Pr, fmt.Sprintf("%s:%s", repo, slugPath))
 	if err != nil {
-		web.Pr.Backend.Logger.Error("cannot get patchset", "err", err)
+		web.Pr.Backend.Logger.Error("cannot resolve target", "err", err, "repo", repo, "slug", slugPath)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -353,12 +400,7 @@ func createPrDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	selectedIdx := 0
-	if patchIDStr := r.PathValue("patchID"); patchIDStr != "" {
-		patchID, err := strconv.ParseInt(patchIDStr, 10, 64)
-		if err != nil {
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return
-		}
+	if patchID > 0 {
 		found := false
 		for idx, summary := range aps.Patches {
 			if summary.ID == patchID {
@@ -371,6 +413,15 @@ func createPrDetail(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+	} else if patchIDStr := r.PathValue("patchID"); patchIDStr != "" {
+		if pID, err := strconv.ParseInt(patchIDStr, 10, 64); err == nil {
+			for idx, summary := range aps.Patches {
+				if summary.ID == pID {
+					selectedIdx = idx
+					break
+				}
+			}
+		}
 	}
 
 	selectedPatch, err := getPatchData(web, aps.Patches[selectedIdx].Patch)
@@ -380,20 +431,18 @@ func createPrDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	formattedPsID := ""
-	for _, psData := range aps.Patchsets {
-		if psData.ID == ps.ID {
-			formattedPsID = psData.FormattedID
-			break
-		}
+	rev := getPatchsetRev(web.Pr, ps)
+	formattedPsID := fmt.Sprintf("%s/%s", pr.RepoName, pr.Slug)
+	if rev > 0 {
+		formattedPsID = fmt.Sprintf("%s/%s.%d", pr.RepoName, pr.Slug, rev)
 	}
 
 	var prevUrl, nextUrl string
 	if selectedIdx > 0 {
-		prevUrl = fmt.Sprintf("/prs/%s/patches/%d", formattedPsID, aps.Patches[selectedIdx-1].ID)
+		prevUrl = fmt.Sprintf("/%s/patches/%d", formattedPsID, aps.Patches[selectedIdx-1].ID)
 	}
 	if selectedIdx < len(aps.Patches)-1 {
-		nextUrl = fmt.Sprintf("/prs/%s/patches/%d", formattedPsID, aps.Patches[selectedIdx+1].ID)
+		nextUrl = fmt.Sprintf("/%s/patches/%d", formattedPsID, aps.Patches[selectedIdx+1].ID)
 	}
 
 	logData, err := getLogData(web, pr.ID, aps.Patchsets)
@@ -417,7 +466,8 @@ func createPrDetail(w http.ResponseWriter, r *http.Request) {
 		NextUrl:             nextUrl,
 		Logs:                logData,
 		Pr: PrData{
-			ID: pr.ID,
+			ID:   pr.ID,
+			Slug: pr.Slug,
 			UserData: UserData{
 				UserID:    user.ID,
 				Name:      displayName,

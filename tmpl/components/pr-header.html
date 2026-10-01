@@ -2,9 +2,9 @@
 <header id="top">
   <h1 class="text-2xl mb">
     <a href="/">dashboard</a>
-    <span> / <a href="{{.Repo.Url}}">{{.Repo.Text}}</a></span>
-    <span> / {{.Pr.Title}} <a href="/prs/{{.Pr.ID}}"><code>#{{.Pr.ID}}</code></a></span>
-    <a class="text-sm" href="/prs/{{.Pr.ID}}/rss">rss</a>
+    <span> / <a href="/{{.RepoName}}">{{.RepoName}}</a></span>
+    <span> / {{.Pr.Title}} <a href="/{{.RepoName}}/{{.Pr.Slug}}"><code>{{.RepoName}}:{{.Pr.Slug}}</code></a></span>
+    <a class="text-sm" href="/{{.RepoName}}/{{.Pr.Slug}}/rss">rss</a>
   </h1>
 
   <div class="mb">
@@ -16,13 +16,16 @@
     <summary>Help</summary>
     <div class="group">
       checkout latest patchset:
-      <pre class="m-0">ssh {{.MetaData.URL}} print {{.Pr.ID}} | git am -3</pre>
+      <pre class="m-0">ssh {{.MetaData.URL}} pull {{.RepoName}}:{{.Pr.Slug}} | git am -3</pre>
 
-      checkout any patchset in a patch request:
-      <pre class="m-0">ssh {{.MetaData.URL}} print {{.Pr.ID}}.[rev] | git am -3</pre>
+      checkout specific patchset revision:
+      <pre class="m-0">ssh {{.MetaData.URL}} pull {{.RepoName}}:{{.Pr.Slug}} [rev] | git am -3</pre>
 
       add changes to patch request:
-      <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} pr add {{.Pr.ID}}</pre>
+      <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} {{.RepoName}}:{{.Pr.Slug}}</pre>
+
+      add comment to patch request:
+      <pre class="m-0">ssh {{.MetaData.URL}} comment {{.RepoName}}:{{.Pr.Slug}} "lgtm!"</pre>
     </div>
   </details>
 </header>

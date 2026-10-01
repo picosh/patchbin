@@ -49,15 +49,17 @@
         <h2>Quickstart</h2>
 
         <div>
-          Submit a patch request:
+          Submit a patch request (new or follow-up):
         </div>
-        <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
+        <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} {repo}:{slug}</pre>
 
         <div>Checkout the latest patchset from a patch request:</div>
-        <pre class="m-0">ssh {{.MetaData.URL}} print {prID} | git am -3</pre>
+        <pre class="m-0">ssh {{.MetaData.URL}} pull {repo}:{slug} | git am -3
+# or shorthand:
+ssh {{.MetaData.URL}} {repo}:{slug}.patch | git am -3</pre>
 
-        <div>Add a follow-up patchset (e.g. after addressing review comments):</div>
-        <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
+        <div>View PR metadata and discussion:</div>
+        <pre class="m-0">ssh {{.MetaData.URL}} show {repo}:{slug}</pre>
 
         <div>Help guide:</div>
         <pre class="m-0">ssh {{.MetaData.URL}} help</pre>
@@ -67,27 +69,75 @@
         <h2>Commands</h2>
 
         <details class="details-min">
-          <summary class="font-bold">pr - manage patch requests</summary>
+          <summary class="font-bold">{repo}:{slug} - submit a patchset</summary>
           <div class="group my">
             <div>
-              <code>pr create {repo}</code> - submit a new PR from stdin
-              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr create {repo}</pre>
+              <code>{repo}:{slug}</code> - submit a patchset from stdin (creates PR if new, appends if exists)
+              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} {repo}:{slug}</pre>
+            </div>
+          </div>
+        </details>
+
+        <details class="details-min">
+          <summary class="font-bold">pull - print patches for checkout</summary>
+          <div class="group my">
+            <div>
+              <code>pull {repo}:{slug} [rev]</code> - print mbox patchset for checkout (pipes to git am)
+              <pre class="m-0">ssh {{.MetaData.URL}} pull {repo}:{slug} | git am -3</pre>
             </div>
             <div>
-              <code>pr add {prID}</code> - add a new patchset to an existing PR from stdin
-              <pre class="m-0">git format-patch main --stdout | ssh {{.MetaData.URL}} pr add {prID}</pre>
+              <code>{repo}:{slug}.patch</code> - shorthand to pull latest patchset
+              <pre class="m-0">ssh {{.MetaData.URL}} {repo}:{slug}.patch | git am -3</pre>
             </div>
+          </div>
+        </details>
+
+        <details class="details-min">
+          <summary class="font-bold">show - view PR summary</summary>
+          <div class="group my">
             <div>
-              <code>pr edit {prID} {title}</code> - rename a PR
-              <pre class="m-0">ssh {{.MetaData.URL}} pr edit {prID} "new title"</pre>
+              <code>show {repo}:{slug}</code> - show metadata, patchsets, and patches for a PR
+              <pre class="m-0">ssh {{.MetaData.URL}} show {repo}:{slug}</pre>
             </div>
+          </div>
+        </details>
+
+        <details class="details-min">
+          <summary class="font-bold">ls - list patch requests</summary>
+          <div class="group my">
             <div>
-              <code>pr summary {prID}</code> - show metadata, patchsets, and patches for a PR
-              <pre class="m-0">ssh {{.MetaData.URL}} pr summary {prID}</pre>
+              <code>ls [repo] [--active|--inactive|--mine]</code> - list PRs
+              <pre class="m-0">ssh {{.MetaData.URL}} ls {repo}</pre>
             </div>
+          </div>
+        </details>
+
+        <details class="details-min">
+          <summary class="font-bold">comment - add a comment</summary>
+          <div class="group my">
             <div>
-              <code>pr ls [repo] [--active|--inactive|--mine]</code> - list PRs
-              <pre class="m-0">ssh {{.MetaData.URL}} pr ls {repo}</pre>
+              <code>comment {repo}:{slug} [msg]</code> - add a comment via argument or stdin
+              <pre class="m-0">ssh {{.MetaData.URL}} comment {repo}:{slug} "looks good!"</pre>
+            </div>
+          </div>
+        </details>
+
+        <details class="details-min">
+          <summary class="font-bold">edit - rename a PR</summary>
+          <div class="group my">
+            <div>
+              <code>edit {repo}:{slug} {title}</code> - rename a PR (creator only)
+              <pre class="m-0">ssh {{.MetaData.URL}} edit {repo}:{slug} "new title"</pre>
+            </div>
+          </div>
+        </details>
+
+        <details class="details-min">
+          <summary class="font-bold">rm - remove a patchset</summary>
+          <div class="group my">
+            <div>
+              <code>rm {repo}:{slug}.{rev}</code> - remove a patchset and its patches (creator only)
+              <pre class="m-0">ssh {{.MetaData.URL}} rm {repo}:{slug}.2</pre>
             </div>
           </div>
         </details>
@@ -96,32 +146,8 @@
           <summary class="font-bold">issue - text-only patch requests (no code required)</summary>
           <div class="group my">
             <div>
-              <code>issue create {repo} [--title]</code> - submit a new issue from stdin
-              <pre class="m-0">echo "steps to reproduce..." | ssh {{.MetaData.URL}} issue create {repo} --title "bug: crash on startup"</pre>
-            </div>
-          </div>
-        </details>
-
-        <details class="details-min">
-          <summary class="font-bold">ps - manage patchsets</summary>
-          <div class="group my">
-            <div>
-              <code>ps rm {prID.rev}</code> - remove a patchset and its patches (creator only)
-              <pre class="m-0">ssh {{.MetaData.URL}} ps rm {prID}.{rev}</pre>
-            </div>
-          </div>
-        </details>
-
-        <details class="details-min">
-          <summary class="font-bold">print - print patches for checkout</summary>
-          <div class="group my">
-            <div>
-              <code>print {prID}</code> - print the latest patchset for a PR
-              <pre class="m-0">ssh {{.MetaData.URL}} print {prID} | git am -3</pre>
-            </div>
-            <div>
-              <code>print {prID}.{rev}</code> - print a specific patchset revision
-              <pre class="m-0">ssh {{.MetaData.URL}} print {prID}.{rev} | git am -3</pre>
+              <code>issue {repo}:{slug} [title] [body]</code> - submit a new issue
+              <pre class="m-0">ssh {{.MetaData.URL}} issue {repo}:{slug} "crash on startup" "steps to reproduce..."</pre>
             </div>
           </div>
         </details>
@@ -130,8 +156,8 @@
           <summary class="font-bold">logs - event history</summary>
           <div class="group my">
             <div>
-              <code>logs [--pr ID] [--pubkey]</code> - list event logs, optionally filtered to a PR or your own activity
-              <pre class="m-0">ssh {{.MetaData.URL}} logs --pr {prID}</pre>
+              <code>logs [--pr {repo}:{slug}] [--pubkey]</code> - list event logs, optionally filtered to a PR or your own activity
+              <pre class="m-0">ssh {{.MetaData.URL}} logs --pr {repo}:{slug}</pre>
             </div>
           </div>
         </details>

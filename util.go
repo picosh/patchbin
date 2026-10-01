@@ -46,6 +46,99 @@ func GetAuthorizedKeys(pubkeys []string) ([]ssh.PublicKey, error) {
 	return keys, nil
 }
 
+type Target struct {
+	Repo string
+	Slug string
+	Rev  int // 1-indexed revision number, or 0 if latest
+}
+
+func (t Target) String() string {
+	if t.Rev > 0 {
+		return fmt.Sprintf("%s:%s.%d", t.Repo, t.Slug, t.Rev)
+	}
+	return fmt.Sprintf("%s:%s", t.Repo, t.Slug)
+}
+
+// ParseTarget parses a colon-delimited target like "repo:slug", "repo:slug.2", "repo:slug.patch", etc.
+func ParseTarget(raw string) (Target, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return Target{}, fmt.Errorf("must provide target in format: <repo>:<slug>")
+	}
+	if strings.ContainsAny(raw, " \t\r\n") {
+		return Target{}, fmt.Errorf("invalid target %q: cannot contain whitespace", raw)
+	}
+	raw = strings.TrimSuffix(raw, ".patch")
+
+	parts := strings.SplitN(raw, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return Target{}, fmt.Errorf("invalid target %q: must be in format <repo>:<slug> (e.g. pico:feat/login)", raw)
+	}
+
+	repo := parts[0]
+	slugPart := parts[1]
+
+	rev := 0
+	if lastDot := strings.LastIndex(slugPart, "."); lastDot != -1 {
+		revStr := strings.TrimPrefix(slugPart[lastDot+1:], "v")
+		if r, err := strconv.Atoi(revStr); err == nil && r > 0 {
+			rev = r
+			slugPart = slugPart[:lastDot]
+		}
+	}
+
+	if slugPart == "" {
+		return Target{}, fmt.Errorf("invalid target %q: slug cannot be empty", raw)
+	}
+
+	return Target{
+		Repo: repo,
+		Slug: slugPart,
+		Rev:  rev,
+	}, nil
+}
+
+// ResolveTarget finds a PatchRequest and its Patchset matching the raw target string.
+func ResolveTarget(gpr GitPatchRequest, raw string) (*PatchRequest, *Patchset, error) {
+	target, err := ParseTarget(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 1. Try to find PR with the exact full slug first (handles branch names with dots, e.g. release-1.0)
+	rawParts := strings.SplitN(strings.TrimSuffix(strings.TrimSpace(raw), ".patch"), ":", 2)
+	fullSlug := rawParts[1]
+	pr, err := gpr.GetPatchRequestByRepoAndSlug(target.Repo, fullSlug)
+	if err == nil {
+		patchsets, err := gpr.GetPatchsetsByPrID(pr.ID)
+		if err != nil || len(patchsets) == 0 {
+			return nil, nil, fmt.Errorf("no patchsets found for PR %s:%s", pr.RepoName, pr.Slug)
+		}
+		return pr, patchsets[len(patchsets)-1], nil
+	}
+
+	// 2. Try with target.Slug (if revision was parsed)
+	pr, err = gpr.GetPatchRequestByRepoAndSlug(target.Repo, target.Slug)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot find PR %s:%s", target.Repo, target.Slug)
+	}
+
+	patchsets, err := gpr.GetPatchsetsByPrID(pr.ID)
+	if err != nil || len(patchsets) == 0 {
+		return nil, nil, fmt.Errorf("no patchsets found for PR %s:%s", pr.RepoName, pr.Slug)
+	}
+
+	if target.Rev == 0 {
+		return pr, patchsets[len(patchsets)-1], nil
+	}
+
+	if target.Rev < 1 || target.Rev > len(patchsets) {
+		return nil, nil, fmt.Errorf("revision %d does not exist for PR %s:%s (PR has %d revision(s))", target.Rev, pr.RepoName, pr.Slug, len(patchsets))
+	}
+
+	return pr, patchsets[target.Rev-1], nil
+}
+
 type ParsedID struct {
 	PrID int64
 	Rev  int // 1-indexed revision number within PR, or 0 if latest

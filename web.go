@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/chroma/v2"
@@ -29,6 +31,7 @@ var (
 	indexTmpl   = getTemplate("index.html")
 	prTmpl      = getTemplate("pr.html")
 	prsListTmpl = getTemplate("prs.html")
+	repoTmpl    = getTemplate("repo.html")
 )
 
 type BasicData struct {
@@ -43,6 +46,7 @@ type MetaData struct {
 
 type PrListItem struct {
 	ID            int64
+	Slug          string
 	Name          string
 	RepoName      string
 	FormattedDate string
@@ -154,6 +158,7 @@ func createPrListHandler(tab TabStatus) http.HandlerFunc {
 			}
 			prItems = append(prItems, PrListItem{
 				ID:            pr.ID,
+				Slug:          pr.Slug,
 				Name:          pr.Name,
 				RepoName:      pr.RepoName,
 				FormattedDate: pr.CreatedAt.Format(web.Backend.Cfg.TimeFormat),
@@ -181,6 +186,233 @@ func shaFn(sha string) string {
 		return "(none)"
 	}
 	return truncateSha(sha)
+}
+
+func createRepoPrListHandler(w http.ResponseWriter, r *http.Request) {
+	web, err := getWebCtx(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	repoName := r.PathValue("repo")
+	if repoName == "prs" {
+		http.Redirect(w, r, "/active", http.StatusMovedPermanently)
+		return
+	}
+	prs, err := web.Pr.GetPatchRequestsByRepoName(repoName)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	prItems := []PrListItem{}
+	for _, pr := range prs {
+		patchsets, _ := web.Pr.GetPatchsetsByPrID(pr.ID)
+		prItems = append(prItems, PrListItem{
+			ID:            pr.ID,
+			Slug:          pr.Slug,
+			Name:          pr.Name,
+			RepoName:      pr.RepoName,
+			FormattedDate: pr.CreatedAt.Format(web.Backend.Cfg.TimeFormat),
+			NumPatchsets:  len(patchsets),
+		})
+	}
+
+	w.Header().Set("content-type", "text/html")
+	err = repoTmpl.Execute(w, struct {
+		Name   string
+		Branch string
+		PRs    []PrListItem
+		MetaData
+	}{
+		Name:   repoName,
+		Branch: "main",
+		PRs:    prItems,
+		MetaData: MetaData{
+			URL:  web.Backend.Cfg.Url,
+			Desc: template.HTML(web.Backend.Cfg.Desc),
+		},
+	})
+	if err != nil {
+		web.Backend.Logger.Error("cannot execute template", "err", err)
+	}
+}
+
+func repoRssHandler(w http.ResponseWriter, r *http.Request) {
+	web, err := getWebCtx(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
+
+	repoName := r.PathValue("repo")
+	if repoName == "prs" {
+		http.Redirect(w, r, "/rss", http.StatusMovedPermanently)
+		return
+	}
+	prs, err := web.Pr.GetPatchRequestsByRepoName(repoName)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	desc := fmt.Sprintf("Events related to repo %s on %s", repoName, web.Backend.Cfg.Url)
+	feed := &feeds.Feed{
+		Title:       fmt.Sprintf("%s repo events", repoName),
+		Link:        &feeds.Link{Href: fmt.Sprintf("https://%s/%s", web.Backend.Cfg.Url, repoName)},
+		Description: desc,
+		Author:      &feeds.Author{Name: "git collaboration server"},
+		Created:     time.Now(),
+	}
+
+	var feedItems []*feeds.Item
+	for _, pr := range prs {
+		eventLogs, err := web.Pr.GetEventLogsByPrID(pr.ID)
+		if err != nil {
+			continue
+		}
+		for _, eventLog := range eventLogs {
+			user, err := web.Pr.GetUserByID(eventLog.UserID)
+			if err != nil {
+				continue
+			}
+			displayName := web.Backend.ComputeUserName(user.Pubkey)
+			realUrl := fmt.Sprintf("https://%s/%s/%s", web.Backend.Cfg.Url, pr.RepoName, pr.Slug)
+			content := fmt.Sprintf(
+				"<div><div>Repo: %s</div><div>Slug: %s</div><div>Event: %s</div><div>Created: %s</div><div>Data: %s</div></div>",
+				pr.RepoName, pr.Slug, eventLog.Event, eventLog.CreatedAt.Format(time.RFC3339Nano), eventLog.Data,
+			)
+			title := fmt.Sprintf(`%s in %s for PR "%s" (%s:%s)`, eventLog.Event, pr.RepoName, pr.Name, pr.RepoName, pr.Slug)
+			item := &feeds.Item{
+				Id:          fmt.Sprintf("%d", eventLog.ID),
+				Title:       title,
+				Link:        &feeds.Link{Href: realUrl},
+				Content:     content,
+				Created:     eventLog.CreatedAt,
+				Description: title,
+				Author:      &feeds.Author{Name: displayName},
+			}
+			feedItems = append(feedItems, item)
+		}
+	}
+	feed.Items = feedItems
+
+	rss, err := feed.ToAtom()
+	if err != nil {
+		http.Error(w, "Could not generate atom rss feed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Add("Content-Type", "application/atom+xml; charset=utf-8")
+	_, _ = w.Write([]byte(rss))
+}
+
+func renderPrRss(w http.ResponseWriter, r *http.Request, web *WebCtx, pr *PatchRequest) {
+	desc := fmt.Sprintf(
+		"Events related to PR %s:%s on %s",
+		pr.RepoName, pr.Slug, web.Backend.Cfg.Url,
+	)
+	feed := &feeds.Feed{
+		Title:       fmt.Sprintf("%s:%s events", pr.RepoName, pr.Slug),
+		Link:        &feeds.Link{Href: fmt.Sprintf("https://%s/%s/%s", web.Backend.Cfg.Url, pr.RepoName, pr.Slug)},
+		Description: desc,
+		Author:      &feeds.Author{Name: "git collaboration server"},
+		Created:     time.Now(),
+	}
+
+	eventLogs, err := web.Pr.GetEventLogsByPrID(pr.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var feedItems []*feeds.Item
+	for _, eventLog := range eventLogs {
+		user, err := web.Pr.GetUserByID(eventLog.UserID)
+		if err != nil {
+			continue
+		}
+		displayName := web.Backend.ComputeUserName(user.Pubkey)
+		realUrl := fmt.Sprintf("https://%s/%s/%s", web.Backend.Cfg.Url, pr.RepoName, pr.Slug)
+		content := fmt.Sprintf(
+			"<div><div>Repo: %s</div><div>Slug: %s</div><div>Event: %s</div><div>Created: %s</div><div>Data: %s</div></div>",
+			pr.RepoName, pr.Slug, eventLog.Event, eventLog.CreatedAt.Format(time.RFC3339Nano), eventLog.Data,
+		)
+		title := fmt.Sprintf(`%s in %s for PR "%s" (%s:%s)`, eventLog.Event, pr.RepoName, pr.Name, pr.RepoName, pr.Slug)
+		item := &feeds.Item{
+			Id:          fmt.Sprintf("%d", eventLog.ID),
+			Title:       title,
+			Link:        &feeds.Link{Href: realUrl},
+			Content:     content,
+			Created:     eventLog.CreatedAt,
+			Description: title,
+			Author:      &feeds.Author{Name: displayName},
+		}
+		feedItems = append(feedItems, item)
+	}
+	feed.Items = feedItems
+
+	rss, err := feed.ToAtom()
+	if err != nil {
+		http.Error(w, "Could not generate atom rss feed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Add("Content-Type", "application/atom+xml; charset=utf-8")
+	_, _ = w.Write([]byte(rss))
+}
+
+func redirectLegacyPr(w http.ResponseWriter, r *http.Request) {
+	idPath := r.PathValue("id")
+	if idPath == "" {
+		idPath = r.PathValue("slug")
+	}
+	if idPath == "" {
+		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+		return
+	}
+
+	if idPath == "active" {
+		http.Redirect(w, r, "/active", http.StatusMovedPermanently)
+		return
+	}
+	if idPath == "inactive" {
+		http.Redirect(w, r, "/inactive", http.StatusMovedPermanently)
+		return
+	}
+
+	parts := strings.Split(idPath, "/")
+	prIDStr := parts[0]
+	revPart := ""
+	if dot := strings.LastIndex(prIDStr, "."); dot != -1 {
+		revPart = prIDStr[dot:]
+		prIDStr = prIDStr[:dot]
+	}
+
+	prID, err := strconv.ParseInt(prIDStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	web, err := getWebCtx(r)
+	if err != nil {
+		http.Error(w, "server error", 500)
+		return
+	}
+
+	pr, err := web.Pr.GetPatchRequestByID(prID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	remainder := ""
+	if len(parts) > 1 {
+		remainder = "/" + strings.Join(parts[1:], "/")
+	}
+
+	newURL := fmt.Sprintf("/%s/%s%s%s", pr.RepoName, pr.Slug, revPart, remainder)
+	http.Redirect(w, r, newURL, http.StatusMovedPermanently)
 }
 
 func rssHandler(w http.ResponseWriter, r *http.Request) {
@@ -245,22 +477,23 @@ func rssHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		displayName := web.Backend.ComputeUserName(user.Pubkey)
-		realUrl := fmt.Sprintf("%s/prs/%d", web.Backend.Cfg.Url, eventLog.PatchRequestID.Int64)
+		realUrl := fmt.Sprintf("https://%s/%s/%s", web.Backend.Cfg.Url, pr.RepoName, pr.Slug)
 		content := fmt.Sprintf(
-			"<div><div>Repo: %s</div><div>PatchRequestID: %d</div><div>Event: %s</div><div>Created: %s</div><div>Data: %s</div></div>",
+			"<div><div>Repo: %s</div><div>Slug: %s</div><div>Event: %s</div><div>Created: %s</div><div>Data: %s</div></div>",
 			pr.RepoName,
-			eventLog.PatchRequestID.Int64,
+			pr.Slug,
 			eventLog.Event,
 			eventLog.CreatedAt.Format(time.RFC3339Nano),
 			eventLog.Data,
 		)
 
 		title := fmt.Sprintf(
-			`%s in %s for PR "%s" (#%d)`,
+			`%s in %s for PR "%s" (%s:%s)`,
 			eventLog.Event,
 			pr.RepoName,
 			pr.Name,
-			eventLog.PatchRequestID.Int64,
+			pr.RepoName,
+			pr.Slug,
 		)
 		item := &feeds.Item{
 			Id:          fmt.Sprintf("%d", eventLog.ID),
@@ -402,15 +635,18 @@ func GitWebServer(cfg *GitCfg) http.Handler {
 	// ensure legacy router is disabled
 	// GODEBUG=httpmuxgo121=0
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /prs/active", ctxMdw(ctx, createPrListHandler("active")))
-	mux.HandleFunc("GET /prs/inactive", ctxMdw(ctx, createPrListHandler("inactive")))
-	mux.HandleFunc("GET /prs/{id}", ctxMdw(ctx, createPrDetail))
-	mux.HandleFunc("GET /prs/{id}/patches/{patchID}", ctxMdw(ctx, createPrDetail))
-	mux.HandleFunc("GET /prs/{id}/rss", ctxMdw(ctx, rssHandler))
-	mux.HandleFunc("GET /rss", ctxMdw(ctx, rssHandler))
-
 	mux.HandleFunc("GET /", ctxMdw(ctx, indexHandler))
+	mux.HandleFunc("GET /active", ctxMdw(ctx, createPrListHandler("active")))
+	mux.HandleFunc("GET /inactive", ctxMdw(ctx, createPrListHandler("inactive")))
+	mux.HandleFunc("GET /rss", ctxMdw(ctx, rssHandler))
 	mux.HandleFunc("GET /syntax.css", ctxMdw(ctx, chromaStyleHandler))
+
+	// Repo routes
+	mux.HandleFunc("GET /{repo}", ctxMdw(ctx, createRepoPrListHandler))
+
+	// PR detail routes (supports branches with slashes, .patch, /rss, /patches/{patchID})
+	mux.HandleFunc("GET /{repo}/{slug...}", ctxMdw(ctx, createPrDetail))
+
 	embedFS, err := getEmbedFS(embedStaticFS, "static")
 	if err != nil {
 		panic(err)

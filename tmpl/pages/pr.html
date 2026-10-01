@@ -1,13 +1,13 @@
-{{template "base" .}}
+{{template "base" .}}
 
 {{define "title"}}{{.Pr.Title}} - pr summary{{end}}
 
 {{define "meta"}}
 <link rel="alternate" type="application/atom+xml"
-      title="RSS feed for git collaboration server"
-      href="/prs/{{.Pr.ID}}/rss" />
+      title="RSS feed for {{.RepoName}}:{{.Pr.Slug}}"
+      href="/{{.RepoName}}/{{.Pr.Slug}}/rss" />
 <meta property="og:title" content="{{.Pr.Title}}" />
-<meta property="og:url" content="https://{{.MetaData.URL}}/prs/{{.Pr.ID}}" />
+<meta property="og:url" content="https://{{.MetaData.URL}}/{{.RepoName}}/{{.Pr.Slug}}" />
 <meta property="og:type" content="object" />
 <meta property="og:site_name" content="{{.MetaData.URL}}" />
 {{end}}
@@ -16,11 +16,11 @@
 <main class="group">
   <div class="flex justify-center items-center">
     <div class="box container w-full">
-      <h1 class="text-xl">{{.RepoName}}</h1>
+      <h1 class="text-xl"><a href="/{{.RepoName}}">{{.RepoName}}</a></h1>
 
       <div class="flex items-center gap border-visited flex-wrap">
-        <a href="/prs/{{.Pr.ID}}">{{.Pr.Title}}</a>
-        <a class="btn-nav flex items-center" href="/prs/{{.Pr.ID}}/rss" style="padding: 0.025rem 0.3rem;">
+        <a href="/{{.RepoName}}/{{.Pr.Slug}}">{{.Pr.Title}}</a>
+        <a class="btn-nav flex items-center" href="/{{.RepoName}}/{{.Pr.Slug}}/rss" style="padding: 0.025rem 0.3rem;">
           rss
         </a>
       </div>
@@ -31,7 +31,7 @@
           {{if eq .Event "pr_patchset_added"}}
             <details class="mb" style="border: 0; padding: 0;">
               <summary>
-                <span class="font-bold">added <a href="/prs/{{.FormattedPatchsetID}}"><code{{if eq .Patchset.ID $.Patchset.ID}} class="border-visited"{{end}}>{{.FormattedPatchsetID}}</code></a></span>
+                <span class="font-bold">added <a href="/{{.FormattedPatchsetID}}"><code{{if eq .Patchset.ID $.Patchset.ID}} class="border-visited"{{end}}>{{.FormattedPatchsetID}}</code></a></span>
                 <span class="event-meta">on <date>{{.Date}}</date> &middot; by {{template "user-pill" .UserData}}</span>
               </summary>
 
@@ -59,7 +59,7 @@
             <div>
               <span class="font-bold">
                 {{if eq .Event "pr_created"}}
-                  created pr with <a href="/prs/{{.FormattedPatchsetID}}"><code{{if eq .Patchset.ID $.Patchset.ID}} class="border-visited"{{end}}>{{.FormattedPatchsetID}}</code></a>
+                  created pr with <a href="/{{.FormattedPatchsetID}}"><code{{if eq .Patchset.ID $.Patchset.ID}} class="border-visited"{{end}}>{{.FormattedPatchsetID}}</code></a>
                 {{else if eq .Event "pr_patchset_deleted"}}
                   deleted <code>{{.FormattedPatchsetID}}</code>
                 {{else if eq .Event "pr_patchset_replaced"}}
@@ -81,16 +81,16 @@
         <summary>cmds</summary>
         <div class="group my">
           checkout latest patchset:
-          <pre class="m-0">ssh {{.MetaData.URL}} print {{.Pr.ID}} | git am -3</pre>
+          <pre class="m-0">ssh {{.MetaData.URL}} pull {{.RepoName}}:{{.Pr.Slug}} | git am -3</pre>
 
-          checkout any patchset in a patch request:
-          <pre class="m-0">ssh {{.MetaData.URL}} print {{.Pr.ID}}.[rev] | git am -3</pre>
+          checkout specific patchset revision:
+          <pre class="m-0">ssh {{.MetaData.URL}} pull {{.RepoName}}:{{.Pr.Slug}} [rev] | git am -3</pre>
 
           add changes to patch request:
-          <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} pr add {{.Pr.ID}}</pre>
+          <pre class="m-0">git format-patch {{.Branch}} --stdout | ssh {{.MetaData.URL}} {{.RepoName}}:{{.Pr.Slug}}</pre>
 
           add comment to patch request:
-          <pre class="m-0">echo "lgtm!" | ssh {{.MetaData.URL}} pr comment {{.Pr.ID}}</pre>
+          <pre class="m-0">ssh {{.MetaData.URL}} comment {{.RepoName}}:{{.Pr.Slug}} "lgtm!"</pre>
         </div>
       </details>
     </div>
@@ -100,7 +100,7 @@
     <div class="patchset-split">
       <h3 class="text-md mb">
         Patchset
-        <a href="/prs/{{.FormattedPatchsetID}}"><code class="border-visited">{{.FormattedPatchsetID}}</code></a>
+        <a href="/{{.FormattedPatchsetID}}"><code class="border-visited">{{.FormattedPatchsetID}}</code></a>
         <span class="event-meta">on <date>{{.PatchsetDate}}</date> &middot; commit {{sha .Patch.CommitSha}}</span>
       </h3>
 

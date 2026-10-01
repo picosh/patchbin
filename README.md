@@ -10,22 +10,24 @@ There's no accept or reject step. A patch request is simply active or inactive: 
 
 ## quickstart
 
-Submit a patch request:
+Submit a patch request (new or follow-up):
 
 ```
-git format-patch main --stdout | ssh {url} pr create {repo}
+git format-patch main --stdout | ssh {url} {repo}:{slug}
 ```
 
 Checkout the latest patchset from a patch request:
 
 ```
-ssh {url} print {prID} | git am -3
+ssh {url} pull {repo}:{slug} | git am -3
+# or shorthand:
+ssh {url} {repo}:{slug}.patch | git am -3
 ```
 
-Add a follow-up patchset (e.g. after addressing review comments):
+View PR metadata and discussion:
 
 ```
-git format-patch main --stdout | ssh {url} pr add {prID}
+ssh {url} show {repo}:{slug}
 ```
 
 Help guide:
@@ -36,63 +38,72 @@ ssh {url} help
 
 ## commands
 
-### pr - manage patch requests
+### {repo}:{slug} - submit a patchset
 
-- `pr create {repo}` - submit a new PR from stdin
+Submit a new PR or follow-up patchset from stdin:
+```
+git format-patch main --stdout | ssh {url} {repo}:{slug}
+```
+
+### pull - print patches for checkout
+
+- `pull {repo}:{slug} [rev]` - print mbox patchset for checkout (pipes to git am)
   ```
-  git format-patch main --stdout | ssh {url} pr create {repo}
+  ssh {url} pull {repo}:{slug} | git am -3
   ```
-- `pr add {prID}` - add a new patchset to an existing PR from stdin
+- `{repo}:{slug}.patch` - shorthand to pull latest patchset
   ```
-  git format-patch main --stdout | ssh {url} pr add {prID}
+  ssh {url} {repo}:{slug}.patch | git am -3
   ```
-- `pr edit {prID} {title}` - rename a PR
+
+### show - view PR summary
+
+- `show {repo}:{slug}` - show metadata, patchsets, and patches for a PR
   ```
-  ssh {url} pr edit {prID} "new title"
+  ssh {url} show {repo}:{slug}
   ```
-- `pr comment {prID}` - add a comment to a PR from stdin
+
+### ls - list patch requests
+
+- `ls [repo] [--active|--inactive|--mine]` - list PRs
   ```
-  echo "looks good to me!" | ssh {url} pr comment {prID}
+  ssh {url} ls {repo}
   ```
-- `pr summary {prID}` - show metadata, patchsets, and patches for a PR
+
+### comment - add a comment
+
+- `comment {repo}:{slug} [message]` - add a comment via argument or stdin
   ```
-  ssh {url} pr summary {prID}
+  ssh {url} comment {repo}:{slug} "looks good to me!"
+  echo "looks good to me!" | ssh {url} comment {repo}:{slug}
   ```
-- `pr ls [repo] [--active|--inactive|--mine]` - list PRs
+
+### edit - rename a PR
+
+- `edit {repo}:{slug} {title}` - rename a PR (creator only)
   ```
-  ssh {url} pr ls {repo}
+  ssh {url} edit {repo}:{slug} "new title"
+  ```
+
+### rm - remove a patchset
+
+- `rm {repo}:{slug}.{rev}` - remove a patchset and its patches (creator only)
+  ```
+  ssh {url} rm {repo}:{slug}.2
   ```
 
 ### issue - text-only patch requests
 
-- `issue create {repo} [--title]` - submit a new issue from stdin
+- `issue {repo}:{slug} [title] [body]` - submit a new issue
   ```
-  echo "steps to reproduce..." | ssh {url} issue create {repo} --title "bug: crash on startup"
-  ```
-
-### ps - manage patchsets
-
-- `ps rm {prID}.{rev}` - remove a patchset and its patches (creator only)
-  ```
-  ssh {url} ps rm {prID}.{rev}
-  ```
-
-### print - print patches for checkout
-
-- `print {prID}` - print the latest patchset for a PR
-  ```
-  ssh {url} print {prID} | git am -3
-  ```
-- `print {prID}.{rev}` - print a specific patchset revision
-  ```
-  ssh {url} print {prID}.{rev} | git am -3
+  ssh {url} issue {repo}:{slug} "bug: crash on startup" "steps to reproduce..."
   ```
 
 ### logs - event history
 
-- `logs [--pr ID] [--pubkey]` - list event logs, optionally filtered to a PR or your own activity
+- `logs [--pr {repo}:{slug}] [--pubkey]` - list event logs, optionally filtered to a PR or your own activity
   ```
-  ssh {url} logs --pr {prID}
+  ssh {url} logs --pr {repo}:{slug}
   ```
 
 ## self-hosting

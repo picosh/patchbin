@@ -73,18 +73,18 @@ func main() {
 	}
 
 	// PR with title edited
-	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 1 Simple PR")
+	userKey.MustCmd(patch, "push test:simple-pr")
+	userKey.MustCmd(nil, "edit test:simple-pr Simple PR")
 
 	// PR with patchset added by another user
-	userKey.MustCmd(patch, "pr create test")
-	userKey.MustCmd(nil, "pr edit 2 Collaborative PR")
-	adminKey.MustCmd(otherPatch, `pr add 2`)
+	userKey.MustCmd(patch, "push test:collab-pr")
+	userKey.MustCmd(nil, "edit test:collab-pr Collaborative PR")
+	adminKey.MustCmd(otherPatch, "push test:collab-pr")
 
 	// Range Diff PR
-	userKey.MustCmd(rd1, "pr create test")
-	userKey.MustCmd(nil, "pr edit 3 Range Diff")
-	userKey.MustCmd(rd2, "pr add 3")
+	userKey.MustCmd(rd1, "push test:range-diff")
+	userKey.MustCmd(nil, "edit test:range-diff Range Diff")
+	userKey.MustCmd(rd2, "push test:range-diff")
 
 	fmt.Println("time to do some testing...")
 	ch := make(chan os.Signal, 1)
