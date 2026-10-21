@@ -2,6 +2,7 @@ package patchbin
 
 import (
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"slices"
@@ -90,6 +91,7 @@ type PrDetailData struct {
 	PrevUrl             string
 	NextUrl             string
 	Logs                []EventLogData
+	OgDescription       template.HTML
 	MetaData
 }
 
@@ -298,6 +300,44 @@ func getLogData(web *WebCtx, prID int64, patchsetsData []*PatchsetData) ([]Event
 	return logData, nil
 }
 
+func ogDescriptionForPatches(patches []PatchSummary, prTitle string) string {
+	if len(patches) == 1 {
+		msg := ""
+		if patches[0].Title != prTitle {
+			msg = patches[0].Title
+			if patches[0].Body != "" {
+				msg += "\n\n"
+			}
+		}
+		if patches[0].Body != "" {
+			msg += patches[0].Body
+		}
+		return strings.TrimSpace(msg)
+	}
+
+	var titles []string
+	for _, p := range patches {
+		if p.Title != prTitle {
+			titles = append(titles, p.Title)
+		}
+	}
+
+	if len(titles) == 0 {
+		return ""
+	}
+
+	return strings.Join(titles, "\n")
+}
+
+func ogDescriptionHTML(patches []PatchSummary, prTitle string) template.HTML {
+	desc := ogDescriptionForPatches(patches, prTitle)
+	if desc == "" {
+		return ""
+	}
+	escaped := html.EscapeString(desc)
+	return template.HTML(strings.ReplaceAll(escaped, "\n", "&#10;"))
+}
+
 func createPrDetail(w http.ResponseWriter, r *http.Request) {
 	web, err := getWebCtx(r)
 	if err != nil {
@@ -465,6 +505,7 @@ func createPrDetail(w http.ResponseWriter, r *http.Request) {
 		PrevUrl:             prevUrl,
 		NextUrl:             nextUrl,
 		Logs:                logData,
+		OgDescription:       ogDescriptionHTML(aps.Patches, pr.Name),
 		Pr: PrData{
 			ID:   pr.ID,
 			Slug: pr.Slug,

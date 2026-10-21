@@ -7,6 +7,7 @@
       title="RSS feed for {{.RepoName}}:{{.Pr.Slug}}"
       href="/{{.RepoName}}/{{.Pr.Slug}}/rss" />
 <meta property="og:title" content="{{.Pr.Title}}" />
+{{if .OgDescription}}<meta property="og:description" content="{{.OgDescription}}" />{{end}}
 <meta property="og:url" content="https://{{.MetaData.URL}}/{{.RepoName}}/{{.Pr.Slug}}" />
 <meta property="og:type" content="object" />
 <meta property="og:site_name" content="{{.MetaData.URL}}" />
