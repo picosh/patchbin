@@ -1,4 +1,4 @@
-FROM golang:1.25 AS builder-deps
+FROM golang:1.27 AS builder-deps
 LABEL maintainer="Pico Maintainers <hello@pico.sh>"
 
 WORKDIR /app

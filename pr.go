@@ -345,8 +345,8 @@ func (cmd PrCmd) CreateEventLog(tx *sqlx.Tx, eventLog EventLog) error {
 	_, err := tx.Exec(
 		"INSERT INTO event_logs (user_id, patch_request_id, patchset_id, event, data) VALUES (?, ?, ?, ?, ?)",
 		eventLog.UserID,
-		eventLog.PatchRequestID.Int64,
-		eventLog.PatchsetID.Int64,
+		eventLog.PatchRequestID,
+		eventLog.PatchsetID,
 		eventLog.Event,
 		eventLog.Data,
 	)
