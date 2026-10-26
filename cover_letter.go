@@ -153,17 +153,21 @@ func AugmentCoverLetterPatch(rawText string, discussion string, cfgURL string, p
 	return rawText + insert
 }
 
-// GenerateMboxWithCoverLetter returns the full mbox: cover letter + patches.
+// GenerateMboxWithCoverLetter returns the full mbox for a patchset.
 // If the first patch is already a cover letter, augments it with References + discussion.
-// If not, generates a new cover letter from the PR name.
+// If not, the patches are returned as-is.
+//
+// Note: synthesizing a cover letter (empty commit) for patchsets that don't
+// already have one is temporarily disabled while we iterate on the idea.
+// GenerateCoverLetterPatch is kept around for when we re-enable it.
 func GenerateMboxWithCoverLetter(pr *PatchRequest, patches []*Patch,
 	events []*EventLog, users map[int64]*User, cfgURL string,
 ) string {
-	discussion := BuildDiscussion(events, users)
-
 	var buf strings.Builder
 
 	if HasCoverLetter(patches) {
+		discussion := BuildDiscussion(events, users)
+
 		// Augment existing cover letter
 		augmented := AugmentCoverLetterPatch(patches[0].RawText, discussion, cfgURL, pr.ID)
 		buf.WriteString(augmented)
@@ -174,13 +178,12 @@ func GenerateMboxWithCoverLetter(pr *PatchRequest, patches []*Patch,
 			buf.WriteString(patch.RawText)
 		}
 	} else {
-		// Generate new cover letter
-		cover := GenerateCoverLetterPatch(pr, discussion, cfgURL)
-		buf.WriteString(cover)
-
-		// Append all patches
-		for _, patch := range patches {
-			buf.WriteString("\n")
+		// No cover letter present: return the patches as-is.
+		// (Synthetic cover letter generation is disabled for now.)
+		for i, patch := range patches {
+			if i > 0 {
+				buf.WriteString("\n")
+			}
 			buf.WriteString(patch.RawText)
 		}
 	}

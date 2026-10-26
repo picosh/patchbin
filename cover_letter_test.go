@@ -318,24 +318,15 @@ func TestGenerateMboxWithCoverLetter_NoExistingCover(t *testing.T) {
 
 	mbox := GenerateMboxWithCoverLetter(pr, patches, events, users, "patchbin.example.com")
 
-	// Should start with a cover letter (From ... for the cover)
-	if !strings.HasPrefix(mbox, "From ") {
-		t.Fatal("mbox should start with 'From ' (cover letter)")
+	// Synthetic cover letter generation is disabled: no generated cover letter
+	if strings.Contains(mbox, "[patchbin #42]") {
+		t.Fatal("mbox should not contain a generated cover letter subject")
 	}
-
-	// Should contain cover letter with PR title
-	if !strings.Contains(mbox, "[patchbin #42] feat: add auth middleware") {
-		t.Fatal("mbox should contain cover letter with PR title")
+	if strings.Contains(mbox, "References:") {
+		t.Fatal("mbox should not contain a generated References trailer")
 	}
-
-	// Should contain References
-	if !strings.Contains(mbox, "References: https://patchbin.example.com/pr/42") {
-		t.Fatal("mbox should contain References trailer")
-	}
-
-	// Should contain discussion with pubkey fingerprints
-	if !strings.Contains(mbox, "SHA256:") {
-		t.Fatal("mbox should contain discussion with SHA256 fingerprints")
+	if strings.Contains(mbox, "patchbin cover letter") {
+		t.Fatal("mbox should not contain the generated cover letter sign-off")
 	}
 
 	// Should contain the original patches
@@ -384,14 +375,12 @@ func TestGenerateMboxWithCoverLetter_NoEvents(t *testing.T) {
 
 	mbox := GenerateMboxWithCoverLetter(pr, patches, nil, nil, "patchbin.example.com")
 
-	// Should still have a cover letter
-	if !strings.Contains(mbox, "[patchbin #1] fix: typo") {
-		t.Fatal("mbox should contain cover letter with PR title")
+	// Synthetic cover letter generation is disabled: no generated cover letter
+	if strings.Contains(mbox, "[patchbin #1]") {
+		t.Fatal("mbox should not contain a generated cover letter subject")
 	}
-
-	// Should still have References
-	if !strings.Contains(mbox, "References:") {
-		t.Fatal("mbox should contain References trailer")
+	if strings.Contains(mbox, "References:") {
+		t.Fatal("mbox should not contain a generated References trailer")
 	}
 
 	// Should contain the original patches
