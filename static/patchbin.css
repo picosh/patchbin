@@ -362,7 +362,6 @@ summary {
   position: sticky;
   top: 0;
   left: 0;
-  padding: var(--grid-height) 0;
   background-color: var(--bg-color);
   margin: 0;
 }
@@ -648,6 +647,60 @@ summary {
 .semantic-diff-modified-text,
 .semantic-diff-signature_changed-text {
   color: var(--link-color);
+}
+
+.diff-stat {
+  margin-bottom: var(--grid-height);
+}
+
+.diff-stat-files {
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto auto 1fr;
+  column-gap: 0.5rem;
+  row-gap: 0.15rem;
+  align-items: center;
+  margin: var(--grid-height) 0;
+}
+
+.diff-stat-row {
+  display: contents;
+}
+
+.diff-stat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-stat-sep,
+.diff-stat-count,
+.diff-stat-bin,
+.diff-stat-summary {
+  color: var(--grey-light);
+}
+
+.diff-stat-count {
+  text-align: right;
+}
+
+.diff-stat-bin {
+  grid-column: span 2;
+}
+
+.diff-stat-bar {
+  white-space: pre;
+}
+
+.diff-stat-add {
+  color: var(--success);
+}
+
+.diff-stat-del {
+  color: var(--admin);
+}
+
+.diff-stat-summary {
+  margin-bottom: var(--grid-height);
 }
 
 .patchset-split {

@@ -75,6 +75,7 @@ type PatchData struct {
 	PatchHeader         *gitdiff.PatchHeader
 	Url                 template.URL
 	FormattedAuthorDate string
+	DiffStat            DiffStat
 	SemanticSummary     SemanticSummary
 }
 
@@ -241,6 +242,7 @@ func getPatchData(web *WebCtx, patch *Patch) (*PatchData, error) {
 		FormattedAuthorDate: timestamp,
 		PatchFiles:          patchFiles,
 		PatchHeader:         header,
+		DiffStat:            ComputeDiffStat(patchFiles),
 		SemanticSummary:     semanticSummary,
 	}, nil
 }

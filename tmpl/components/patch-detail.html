@@ -7,6 +7,10 @@
     </div>
     {{if .Patch.Body}}<pre class="w-full">{{.Patch.Body}}</pre>{{end}}
 
+    {{if .Patch.DiffStat.HasFiles}}
+    {{template "diff-stat" .Patch}}
+    {{end}}
+
     {{if .Patch.SemanticSummary.HasContent}}
     {{template "semantic-summary" .Patch}}
     {{end}}
@@ -22,6 +26,28 @@
 </div>
 
 <div><a href="#top" class="text-sm">Back to top</a></div>
+{{end}}
+
+{{define "diff-stat"}}
+{{$stat := .DiffStat}}
+<details class="details-min diff-stat" open>
+  <summary class="font-bold">Diff stat</summary>
+  <div class="diff-stat-files mono text-sm">
+    {{range $stat.Files}}
+    <div class="diff-stat-row">
+      <a href="#{{.FileAnchor}}" class="diff-stat-name" data-open-details="1" title="{{.DisplayName}}">{{.DisplayName}}</a>
+      <span class="diff-stat-sep">|</span>
+      {{if .IsBinary}}
+      <span class="diff-stat-bin">Bin</span>
+      {{else}}
+      <span class="diff-stat-count">{{.Total}}</span>
+      <span class="diff-stat-bar"><span class="diff-stat-add">{{.PlusBar}}</span><span class="diff-stat-del">{{.MinusBar}}</span></span>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  <div class="diff-stat-summary text-sm">{{$stat.SummaryText}}</div>
+</details>
 {{end}}
 
 {{define "semantic-summary"}}
