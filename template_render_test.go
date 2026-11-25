@@ -118,4 +118,52 @@ func TestPRTimelineRendersComment(t *testing.T) {
 	if !strings.Contains(out, "timeline-comment") {
 		t.Errorf("expected 'timeline-comment' class in rendered timeline, got:\n%s", out)
 	}
+	if strings.Contains(out, "data-toggle-all-diffs") {
+		t.Errorf("expected no toggle-all-diffs button when there are no patch files")
+	}
+}
+
+func TestPRPatchFilesRendersToggleAllButton(t *testing.T) {
+	files, _, err := ParsePatch(sampleDiff)
+	if err != nil {
+		t.Fatalf("ParsePatch: %v", err)
+	}
+
+	tmpl := getTemplate("pr.html")
+	if tmpl == nil {
+		t.Fatalf("getTemplate returned nil")
+	}
+
+	data := PrDetailData{
+		Page: "pr",
+		Pr: PrData{
+			ID:    1,
+			Title: "Test PR",
+		},
+		Patchset: &Patchset{},
+		Patch: &PatchData{
+			Patch: &Patch{},
+			PatchFiles: []*PatchFile{
+				{
+					File:        files[0],
+					DisplayName: "foo.go",
+					FileAnchor:  "patch-1-foo.go",
+					Adds:        1,
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, `data-toggle-all-diffs`) {
+		t.Errorf("expected data-toggle-all-diffs button when patch files exist")
+	}
+	if !strings.Contains(out, `>collapse all</button>`) {
+		t.Errorf("expected collapse all label on toggle button")
+	}
 }

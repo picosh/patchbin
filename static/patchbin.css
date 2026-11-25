@@ -297,6 +297,10 @@ summary {
   border-radius: 4px;
   padding: 6px 10px;
   border: 1px solid var(--border);
+  background-color: transparent;
+  color: var(--text-color);
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .btn-nav:hover, .btn-active {

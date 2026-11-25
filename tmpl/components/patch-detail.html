@@ -19,7 +19,12 @@
 {{end}}
 
 {{define "patch-files"}}
-<div class="group">
+{{if .Patch.PatchFiles}}
+<div class="flex items-center">
+  <button type="button" class="btn-nav text-sm" data-toggle-all-diffs aria-expanded="true">collapse all</button>
+</div>
+{{end}}
+<div class="group" id="patch-files">
   {{range .Patch.PatchFiles}}
     {{template "patch-file" .}}
   {{end}}
