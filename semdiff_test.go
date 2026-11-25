@@ -107,8 +107,8 @@ func TestSemanticChangesBodyOnlyHunkFallsBackToEnclosingFunc(t *testing.T) {
 // field (e.g. cli.Command{Action: func(cCtx *cli.Context) error { ... }}).
 // Git's own hunk-header heuristic can't find a nearby "func Name(...)" line
 // here either -- it picks up unrelated doc text -- so neither the primary
-// extraction nor the enclosing-comment fallback finds a name, and we should
-// fall back to a generic line-range chunk instead of reporting nothing.
+// extraction nor the enclosing-comment fallback finds a name. Unnamed chunks
+// are omitted from the semantic summary to keep it high-signal.
 const closureDiff = `diff --git a/cli.go b/cli.go
 index 1111111..2222222 100644
 --- a/cli.go
@@ -129,7 +129,7 @@ index 1111111..2222222 100644
  						if err != nil {
 `
 
-func TestSemanticChangesClosureHunkFallsBackToGenericChunk(t *testing.T) {
+func TestSemanticChangesOmitsUnnamedChunks(t *testing.T) {
 	files, _, err := ParsePatch(closureDiff)
 	if err != nil {
 		t.Fatalf("ParsePatch: %v", err)
@@ -139,20 +139,8 @@ func TestSemanticChangesClosureHunkFallsBackToGenericChunk(t *testing.T) {
 	}
 
 	changes := AnalyzeSemanticChanges(files[0])
-	if len(changes) == 0 {
-		t.Fatalf("expected a fallback generic chunk change, got none")
-	}
-
-	var sawChunk bool
-	for _, c := range changes {
-		t.Logf("change: kind=%s entity=%s name=%s hunk=%d", c.Kind, c.EntityKind, c.Name, c.HunkIndex)
-		if c.EntityKind == "chunk" && c.Kind == SemanticModified {
-			sawChunk = true
-		}
-	}
-
-	if !sawChunk {
-		t.Errorf("expected fallback to report a generic chunk change")
+	if len(changes) != 0 {
+		t.Fatalf("expected unnamed chunk to be omitted, got %+v", changes)
 	}
 }
 

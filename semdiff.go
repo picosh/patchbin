@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -390,9 +389,6 @@ func AnalyzeSemanticChanges(file *gitdiff.File) []SemanticChange {
 		if len(hunkChanges) == 0 {
 			hunkChanges = enclosingChangeFromComment(spec, frag, hunkIdx)
 		}
-		if len(hunkChanges) == 0 {
-			hunkChanges = genericChunkChange(frag, hunkIdx)
-		}
 		changes = append(changes, hunkChanges...)
 	}
 
@@ -465,25 +461,6 @@ func enclosingChangeFromComment(spec languageSpec, frag *gitdiff.TextFragment, h
 		Kind:       SemanticModified,
 		EntityKind: kind,
 		Name:       name,
-		HunkIndex:  hunkIdx,
-	}}
-}
-
-// genericChunkChange is the last-resort fallback for a hunk with real edits
-// where neither a full declaration nor an enclosing-function comment could
-// be identified -- e.g. a change inside an anonymous closure passed as a
-// struct field, or a hunk in a language/file with no named top-level
-// entities (go.mod, go.sum). It reports the hunk by its line range instead
-// of by name, so reviewers still see *something* changed there.
-func genericChunkChange(frag *gitdiff.TextFragment, hunkIdx int) []SemanticChange {
-	if frag.LinesAdded == 0 && frag.LinesDeleted == 0 {
-		return nil
-	}
-
-	return []SemanticChange{{
-		Kind:       SemanticModified,
-		EntityKind: "chunk",
-		Name:       fmt.Sprintf("lines %d-%d", frag.NewPosition, frag.NewPosition+frag.NewLines-1),
 		HunkIndex:  hunkIdx,
 	}}
 }

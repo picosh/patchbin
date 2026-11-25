@@ -23,5 +23,5 @@
   --diff-del-gutter: var(--admin);
   --diff-hunk-bg: rgba(139, 233, 253, 0.08);
   --diff-hunk-text: var(--link-color);
-  --diff-num-text: var(--grey-light);
+  --diff-num-text: var(--text-color);
 }

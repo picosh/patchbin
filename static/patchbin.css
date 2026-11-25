@@ -328,7 +328,7 @@ summary {
 .contributor-tag-admin {
   font-family: monospace;
   font-size: 0.85em;
-  color: var(--grey-light);
+  color: var(--text-color);
   border: none;
   padding: 0;
 }
@@ -338,7 +338,7 @@ summary {
 }
 
 .event-meta {
-  color: var(--grey-light);
+  color: var(--text-color);
 }
 
 .word-break-word {
@@ -412,7 +412,7 @@ summary {
   min-width: 2.5rem;
   padding: 0 0.5rem;
   text-align: right;
-  color: var(--diff-num-text, var(--grey-light));
+  color: var(--diff-num-text, var(--text-color));
   user-select: none;
   -webkit-user-select: none;
   font-size: 0.85em;
@@ -605,7 +605,7 @@ summary {
 }
 
 .semantic-diff-entity-kind {
-  color: var(--grey-light);
+  color: var(--text-color);
 }
 
 .semantic-diff-added .semantic-diff-entity-kind {
@@ -637,7 +637,7 @@ summary {
 
 .semantic-summary-totals {
   margin-bottom: var(--grid-height);
-  color: var(--grey-light);
+  color: var(--text-color);
 }
 
 .semantic-diff-added-text {
@@ -680,7 +680,7 @@ summary {
 .diff-stat-count,
 .diff-stat-bin,
 .diff-stat-summary {
-  color: var(--grey-light);
+  color: var(--text-color);
 }
 
 .diff-stat-count {
